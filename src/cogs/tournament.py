@@ -618,25 +618,20 @@ class TournamentCog(commands.Cog, name="Tournament"):
         """Removes other reactions in the same category as the new reaction from a match post. Basically turns the reactions into a (shitty) radio button."""  # Check if message is a match
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        # Fetch channel and message
-        channel = self.bot.get_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
-        user = self.bot.get_user(payload.user_id)
-        if not user:
-            user = await self.bot.fetch_user(payload.user_id)
-        match: Match = db_cog.get_match_by_message(payload.message_id)
-        if match is None:
-            return
-
-        # We only care about reactions to our own messages
-        if message.author != self.bot.user:
-            return False
         # We don't care about our own reactions
         if payload.user_id == self.bot.user.id:
             return False
+
         # We only care about running matches
+        match: Match = db_cog.get_match_by_message(payload.message_id)
+        if match is None:
+            return
         if match.running != 1:
             return
+
+        # Fetch channel and message
+        channel = self.bot.get_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
 
         team1: Team = db_cog.get_team(match.team1, match.guild)
         team2: Team = db_cog.get_team(match.team2, match.guild)
@@ -650,7 +645,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if emoji in team_emoji:
             if emoji in reactions:
                 team_emoji.remove(emoji)
-                to_remove.update(reactions.intersection(team_emoji))
+                to_remove.update(team_emoji)
 
         # Games
         if match.bestof > 1:
@@ -660,10 +655,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if emoji in games_emojis:
                 if emoji in reactions:
                     games_emojis.remove(emoji)
-                    to_remove.update(reactions.intersection(games_emojis))
+                    to_remove.update(games_emojis)
 
         for reaction in to_remove:
-            await message.remove_reaction(reaction, user)
+            await message.remove_reaction(reaction, discord.Object(payload.user_id))
 
 
 def setup(bot):
