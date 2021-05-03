@@ -20,7 +20,6 @@ def get_prefix(bot, message):
 initial_extensions = ["database", "team", "tournament"]  # "team", "tournament",
 
 intents = discord.Intents.default()
-intents.members = True
 
 help_command = commands.DefaultHelpCommand(no_category="General")
 
