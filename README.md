@@ -9,6 +9,7 @@ Python 3.9+ \
 Install modules: `pip install -r requirements.txt`
 
 ## Usage
-Create the `./persistent` directory. \
-Create a file `./persistent/token.txt` and put your bot token in it. \
 Run `python main.py` 
+Enter your token
+
+If you wish to change your token at a later time, you can do so in `./persistent/config.json`
