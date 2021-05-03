@@ -156,93 +156,96 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         content_leaderboard = f"***Leaderboard***\n```{leaderboard_str}```\n"
 
-        # Past Matches
-        counter = 0
-        messages = []
-        for m in past_matches:
-            counter += 1
-            team1 = teams[m.team1]
-            team2 = teams[m.team2]
+        # # Past Matches
+        # counter = 0
+        # messages = []
+        # for m in past_matches:
+        #     counter += 1
+        #     team1 = teams[m.team1]
+        #     team2 = teams[m.team2]
 
-            win_games = math.ceil(m.bestof / 2)
-            lose_games = m.games - win_games
+        #     win_games = math.ceil(m.bestof / 2)
+        #     lose_games = m.games - win_games
 
-            url = ""
-            try:
-                url = (await channel.fetch_message(m.message)).jump_url
-            except discord.NotFound:
-                pass
+        #     url = ""
+        #     try:
+        #         url = (await channel.fetch_message(m.message)).jump_url
+        #     except discord.NotFound:
+        #         pass
 
-            if m.result == 1:
-                match_content = f"{m.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{m.bestof} - Result: {win_games}-{lose_games}"
-                if url != "":
-                    match_content += " - Link: " + url
-            elif m.result == 2:
-                match_content = f"{m.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{m.bestof} - Result: {lose_games}-{win_games}"
-                if url != "":
-                    match_content += " - Link: " + url
-            else:
-                match_content = f"Inconsistent data for match {m.name}"
-            messages.append(match_content)
+        #     if m.result == 1:
+        #         match_content = f"{m.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{m.bestof} - Result: {win_games}-{lose_games}"
+        #         if url != "":
+        #             match_content += " - Link: " + url
+        #     elif m.result == 2:
+        #         match_content = f"{m.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{m.bestof} - Result: {lose_games}-{win_games}"
+        #         if url != "":
+        #             match_content += " - Link: " + url
+        #     else:
+        #         match_content = f"Inconsistent data for match {m.name}"
+        #     messages.append(match_content)
 
-        content_past_messages = (
-            "***Past Matches***\n" + "\n".join(messages) + "\n"
-            if len(messages) > 0
-            else ""
-        )
+        # content_past_messages = (
+        #     "***Past Matches***\n" + "\n".join(messages) + "\n"
+        #     if len(messages) > 0
+        #     else ""
+        # )
 
-        # Closed Matches
-        counter = 0
-        messages = []
-        for m in closed_matches:
-            counter += 1
-            team1 = teams[m.team1]
-            team2 = teams[m.team2]
+        # # Closed Matches
+        # counter = 0
+        # messages = []
+        # for m in closed_matches:
+        #     counter += 1
+        #     team1 = teams[m.team1]
+        #     team2 = teams[m.team2]
 
-            url = ""
-            try:
-                url = (await channel.fetch_message(m.message)).jump_url
-            except discord.NotFound:
-                pass
+        #     url = ""
+        #     try:
+        #         url = (await channel.fetch_message(m.message)).jump_url
+        #     except discord.NotFound:
+        #         pass
 
-            match_content = f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}"
-            if url != "":
-                match_content += " - Link: " + url
-            messages.append(match_content)
+        #     match_content = f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}"
+        #     if url != "":
+        #         match_content += " - Link: " + url
+        #     messages.append(match_content)
 
-        content_closed_messages = (
-            "***Closed Matches***\n" + "\n".join(messages) + "\n"
-            if len(messages) > 0
-            else ""
-        )
+        # content_closed_messages = (
+        #     "***Closed Matches***\n" + "\n".join(messages) + "\n"
+        #     if len(messages) > 0
+        #     else ""
+        # )
 
-        # Running Matches
-        counter = 0
-        messages = []
-        for m in active_matches:
-            counter += 1
-            team1 = teams[m.team1]
-            team2 = teams[m.team2]
+        # # Running Matches
+        # counter = 0
+        # messages = []
+        # for m in active_matches:
+        #     counter += 1
+        #     team1 = teams[m.team1]
+        #     team2 = teams[m.team2]
 
-            url = ""
-            try:
-                url = (await channel.fetch_message(m.message)).jump_url
-            except discord.NotFound:
-                pass
+        #     url = ""
+        #     try:
+        #         url = (await channel.fetch_message(m.message)).jump_url
+        #     except discord.NotFound:
+        #         pass
 
-            match_content = f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}"
-            if url != "":
-                match_content += " - Link: " + url
-            messages.append(match_content)
+        #     match_content = f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}"
+        #     if url != "":
+        #         match_content += " - Link: " + url
+        #     messages.append(match_content)
 
-        content_running_messages = (
-            "***Running Matches***\n" + "\n".join(messages) + "\n"
-            if len(messages) > 0
-            else ""
-        )
+        # content_running_messages = (
+        #     "***Running Matches***\n" + "\n".join(messages) + "\n"
+        #     if len(messages) > 0
+        #     else ""
+        # )
 
         # Combine
-        content = f"{content_header}{content_scoring_table}{content_leaderboard}{content_past_messages}{content_closed_messages}{content_running_messages}".strip()
+        # content = f"{content_header}{content_scoring_table}{content_leaderboard}{content_past_messages}{content_closed_messages}{content_running_messages}".strip()
+        content = (
+            f"{content_header}{content_scoring_table}{content_leaderboard}".strip()
+        )
         content += "\n------------------------------------------------------------------------------------------------"
 
         return content
