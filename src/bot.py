@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import sqlite3
 import traceback
@@ -264,19 +265,30 @@ async def on_command_error(ctx, error):
 
 
 def launch():
-    # Find token
-    logging.debug("Loading token")
-    tokenPath = Path("./persistent/token.txt")
-    if not tokenPath.exists():
-        logging.error("Token file does not exist!")
-        return
-    token = tokenPath.read_text()
-    logging.debug("Finished loading token")
+    # Load json and token
+    logging.debug("Loading config")
+    configPath = Path("./persistent/config.json")
+    if not configPath.exists():
+        config = {"token": None}
+        with open(configPath, "w") as f:
+            json.dump(config, f)
+    else:
+        with open(configPath, "r") as f:
+            config = json.load(f)
+    logging.debug("Finished loading config")
 
+    if config["token"] is None:
+        logging.info("Could not find token. Please enter it: ")
+        config["token"] = input()
+        with open(configPath, "w") as f:
+            json.dump(config, f)
+        logging.info(f"If this token is incorrect, you can change it in {configPath}")
+
+    # Start bot
     logging.debug("Starting bot")
     for cog in initial_extensions:
         logging.debug(f"Loading extension {cog}")
         load_extension_wrapper(cog)
 
-    bot.run(token, bot=True, reconnect=True)
+    bot.run(config["token"], bot=True, reconnect=True)
     logging.debug("Shutting down")
