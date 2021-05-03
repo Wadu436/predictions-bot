@@ -205,9 +205,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             except discord.NotFound:
                 pass
 
-            match_content = (
-                f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}",
-            )
+            match_content = f"{m.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{m.bestof}"
             if url != "":
                 match_content += " - Link: " + url
             messages.append(match_content)
@@ -520,7 +518,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         # Is name a running match
         match = db_cog.get_match(name, tournament.id)
-        if (match.running is None) or (match.running != 1):
+        if (match is None) or (match.running != 1):
             await ctx.send("Message is not a running match.")
             return
 
