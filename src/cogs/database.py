@@ -78,7 +78,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             with open("./src/cogs/database_scripts/schema.sql", "r") as script:
                 cur.executescript(script.read())
 
-    def close(self) -> None:
+    def cog_unload(self):
         logging.info("Closing Database")
         self.con.commit()
         self.con.close()
@@ -385,16 +385,6 @@ class DatabaseCog(commands.Cog, name="Database"):
 
 
 def setup(bot):
-    global db_cog
-
     db_cog = DatabaseCog(bot)
     db_cog.open()
     bot.add_cog(db_cog)
-
-
-def teardown(bot):
-    global db_cog
-
-    db_cog.close()
-    bot.remove_cog(db_cog.name)
-    db_cog = None
