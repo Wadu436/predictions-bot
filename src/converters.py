@@ -40,7 +40,7 @@ class CodeConverter(commands.Converter):
 
         db_cog: DatabaseCog = ctx.bot.get_cog("Database")
 
-        code_exists = db_cog.get_team(code, ctx.guild.id) is not None
+        code_exists = (await db_cog.get_team(code, ctx.guild.id)) is not None
         if code_exists != self.exist:
             if self.exist:
                 raise exceptions.TeamDoesntExist(code)

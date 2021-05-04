@@ -33,7 +33,7 @@ CREATE TABLE matches (
     PRIMARY KEY(name, tournament),
     FOREIGN KEY (team1, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
     FOREIGN KEY (team2, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
-    FOREIGN KEY (tournament) REFERENCES tournaments (id)
+    FOREIGN KEY (tournament) REFERENCES tournaments (id) ON DELETE CASCADE
 );
 CREATE TABLE users_matches (
     user_id INTEGER NOT NULL,
@@ -42,6 +42,6 @@ CREATE TABLE users_matches (
     team INTEGER NOT NULL,
     games INTEGER NOT NULL,
     PRIMARY KEY(user_id, match_name, match_tournament),
-    FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (match_name, match_tournament) REFERENCES matches (name, tournament)
+    FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (match_name, match_tournament) REFERENCES matches (name, tournament) ON UPDATE CASCADE ON DELETE CASCADE
 );
