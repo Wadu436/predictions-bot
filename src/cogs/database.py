@@ -77,8 +77,38 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as db:
                 with open("./src/cogs/database_scripts/schema.sql", "r") as script:
                     await db.executescript(script.read())
-                    await db.execute("PRAGMA user_version = 1")
                     await db.commit()
+        else:
+            async with aiosqlite.connect(
+                self.db_path,
+                detect_types=PARSE_DECLTYPES,
+            ) as db:
+                async with db.execute("PRAGMA user_version;") as cur:
+                    version = (await cur.fetchone())[0]
+                    if version < 1:
+                        # Update schemas
+                        backup_path = Path("./persistent/bot_backup.db")
+                        async with aiosqlite.connect(
+                            backup_path,
+                            detect_types=PARSE_DECLTYPES,
+                        ) as db_backup:
+                            await db.backup(db_backup)
+
+                        logging.info("Updating schema (Backup made to bot_backup.db).")
+                        for i in range(version, 1):
+                            migration_path = Path(
+                                f"./src/cogs/database_scripts/migration_{i}_{i+1}.sql"
+                            )
+                            if not migration_path.exists():
+                                logging.error("Migration file does not exist.")
+                                break
+
+                            with open(
+                                migration_path,
+                                "r",
+                            ) as script:
+                                await db.executescript(script.read())
+                        await db.commit()
 
     # Team-related queries
     async def insert_team(self, team: Team) -> None:

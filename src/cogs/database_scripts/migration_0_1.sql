@@ -1,25 +1,6 @@
-CREATE TABLE teams (
-    name TEXT NOT NULL,
-    code TEXT NOT NULL,
-    emoji TEXT NOT NULL,
-    guild INTEGER NOT NULL,
-    PRIMARY KEY(code, guild)
-);
-CREATE TABLE users (
-    id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    PRIMARY KEY(id)
-);
-CREATE TABLE tournaments (
-    id GUID NOT NULL,
-    name TEXT NOT NULL,
-    channel INTEGER NOT NULL,
-    message INTEGER NOT NULL,
-    running INTEGER NOT NULL,
-    PRIMARY KEY(id),
-    UNIQUE(name, channel)
-);
-CREATE TABLE matches (
+PRAGMA foreign_keys = OFF;
+BEGIN;
+CREATE TABLE new_matches (
     name TEXT NOT NULL,
     guild INTEGER NOT NULL,
     message INTEGER NOT NULL UNIQUE,
@@ -35,7 +16,13 @@ CREATE TABLE matches (
     FOREIGN KEY (team2, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
     FOREIGN KEY (tournament) REFERENCES tournaments (id) ON DELETE CASCADE
 );
-CREATE TABLE users_matches (
+INSERT INTO new_matches
+SELECT *
+FROM matches;
+DROP TABLE matches;
+ALTER TABLE new_matches
+    RENAME TO matches;
+CREATE TABLE new_users_matches (
     user_id INTEGER NOT NULL,
     match_name TEXT NOT NULL,
     match_tournament GUID NOT NULL,
@@ -45,4 +32,12 @@ CREATE TABLE users_matches (
     FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (match_name, match_tournament) REFERENCES matches (name, tournament) ON UPDATE CASCADE ON DELETE CASCADE
 );
+INSERT INTO new_users_matches
+SELECT *
+FROM users_matches;
+DROP TABLE users_matches;
+ALTER TABLE new_users_matches
+    RENAME TO users_matches;
+COMMIT;
+PRAGMA foreign_keys = ON;
 PRAGMA user_version = 1;
