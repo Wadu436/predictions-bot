@@ -77,6 +77,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as db:
                 with open("./src/cogs/database_scripts/schema.sql", "r") as script:
                     await db.executescript(script.read())
+                    await db.execute("PRAGMA user_version = 1")
                     await db.commit()
 
     # Team-related queries
