@@ -75,7 +75,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                 self.db_path,
                 detect_types=PARSE_DECLTYPES,
             ) as db:
-                with open("./src/cogs/database_scripts/schema.sql", "r") as script:
+                with open("./src/cogs/database_scripts/leaderboard.sql", "r") as script:
                     await db.executescript(script.read())
                     await db.commit()
         else:
@@ -518,6 +518,20 @@ class DatabaseCog(commands.Cog, name="Database"):
                 },
             )
             await db.commit()
+
+    async def get_leaderboard(
+        self,
+        tournament: uuid.UUID,
+        scoring_table: dict[str, int],
+    ) -> list[tuple[str, int]]:
+        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+            with open("./src/cogs/database_scripts/leaderboard.sql", "r") as script:
+                cur = await db.execute(
+                    script.read(),
+                    {"tournament": tournament} | scoring_table,
+                )
+                leaderboard = await cur.fetchall()
+        return leaderboard
 
 
 def setup(bot):

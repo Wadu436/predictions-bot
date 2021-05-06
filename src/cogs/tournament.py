@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import typing
 import uuid
 
 import aiosqlite
@@ -86,50 +87,29 @@ class TournamentCog(commands.Cog, name="Tournament"):
             )
             await db_cog.insert_usermatch(usermatch)
 
-    async def calculate_leaderboard(
-        self, tournament: Tournament
-    ) -> list[tuple[int, str]]:
-        db_cog: DatabaseCog = self.bot.get_cog("Database")
+    async def generate_leaderboard(self, tournament: Tournament) -> str:
+        db_cog = self.bot.get_cog("Database")
 
-        # Scoring table
+        # Leaderboard
+        leaderboard = await db_cog.get_leaderboard(tournament.id, self.score_table)
+        leaderboard_strings = []
+        rank = 0
+        prev_rank_score = -1
+        players = 0
+        if len(leaderboard) > 0:
+            for entry in leaderboard:
+                user_score, user_name = entry
 
-        finished_matches: list[Match] = await db_cog.get_matches_by_state(
-            tournament.id, 0
-        )
-        user_scores: dict[int, tuple[int, str]] = dict()  # (user_id, (score, name))
-        for match in finished_matches:
-            team_result = match.result
-            games_result = match.games
-            usermatches: set[UserMatch] = await db_cog.get_usermatch_by_match(
-                match.name, match.tournament
-            )
+                players += 1
+                if prev_rank_score != user_score:
+                    prev_rank_score = user_score
+                    rank = players
 
-            for um in usermatches:
-                user_entry = user_scores.get(um.user_id, (0, None))
-                user_score = user_entry[0]
-                user_name = (
-                    (await db_cog.get_user(um.user_id)).name
-                    if user_entry[1] is None
-                    else user_entry[1]
-                )
-
-                if team_result == um.team:
-                    if match.bestof == 1:
-                        user_score += self.score_table["bo1_team"]
-                    elif match.bestof == 3:
-                        user_score += self.score_table["bo3_team"]
-                    elif match.bestof == 5:
-                        user_score += self.score_table["bo5_team"]
-
-                if games_result == um.games:
-                    if match.bestof == 3:
-                        user_score += self.score_table["bo3_games"]
-                    elif match.bestof == 5:
-                        user_score += self.score_table["bo5_games"]
-                user_scores[um.user_id] = (user_score, user_name)
-
-        scores_name_sorted = sorted(list(user_scores.values()), key=lambda x: x[1])
-        return sorted(scores_name_sorted, key=lambda x: x[0], reverse=True)
+                leaderboard_strings.append(f"{rank} - {user_name}: {user_score}")
+            leaderboard_str = "\n".join(leaderboard_strings)
+        else:
+            leaderboard_str = ""
+        return leaderboard_str
 
     async def generate_tournament_message(self, tournament: Tournament):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
@@ -152,27 +132,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Scoring table
         content_scoring_table = f"***Scoring Table***\n```Correct team - BO1: {self.score_table['bo1_team']}\nCorrect team - BO3: {self.score_table['bo3_team']}\tCorrect number of games - BO3: {self.score_table['bo3_games']}\nCorrect team - BO5: {self.score_table['bo5_team']}\tCorrect number of games - BO5: {self.score_table['bo5_games']}```\n"
 
-        # Leaderboard
-        leaderboard = await self.calculate_leaderboard(tournament)
-        leaderboard_strings = []
-        rank = 0
-        prev_rank_score = -1
-        players = 0
-        if len(leaderboard) > 0:
-            for entry in leaderboard:
-                user_score, user_name = entry
-
-                players += 1
-                if prev_rank_score != user_score:
-                    prev_rank_score = user_score
-                    rank = players
-
-                leaderboard_strings.append(f"{rank} - {user_name}: {user_score}")
-            leaderboard_str = "\n".join(leaderboard_strings)
+        leaderboard_str = await self.generate_leaderboard(tournament)
+        if leaderboard_str:
+            content_leaderboard = f"***Leaderboard***\n```{leaderboard_str}```\n"
         else:
-            leaderboard_str = " "
-
-        content_leaderboard = f"***Leaderboard***\n```{leaderboard_str}```\n"
+            content_leaderboard = ""
 
         # Combine
         content = (
