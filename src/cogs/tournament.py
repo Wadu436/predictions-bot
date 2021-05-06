@@ -298,20 +298,25 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @commands.command(
         name="tournament_show",
-        brief="Shows the running tournament.",
-        description="Shows info about the currently running tournament in this channel.",
+        brief="Shows info on a tournament.",
+        description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.",
         aliases=["tr_show"],
-        usage="",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def tournament_show(self, ctx):
+    async def tournament_show(self, ctx, *, name: typing.Optional[str]):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        # Check if tournament running
-        tournament = await db_cog.get_running_tournament(ctx.channel.id)
+        if name is not None:
+            tournament = await db_cog.get_tournament_by_name(name, ctx.channel.id)
+            txt = "No tournament with this name exists in this channel."
+        else:
+            tournament = await db_cog.get_running_tournament(ctx.channel.id)
+            txt = "No tournament is running."
+
+        # Check if tournament exists
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
+            msg = await ctx.send(txt)
             await asyncio.sleep(5)
             await msg.delete()
             return
@@ -319,6 +324,31 @@ class TournamentCog(commands.Cog, name="Tournament"):
         content = await self.generate_tournament_message(tournament)
         await ctx.send(content + "\n`This message does not get updated.`")
         await ctx.message.delete()
+
+    @commands.command(
+        name="tournament_list",
+        brief="Lists tournaments in a channel.",
+        description="Lists all current and past tournaments in this channel.",
+        aliases=["tr_list"],
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_list(self, ctx):
+        db_cog: DatabaseCog = self.bot.get_cog("Database")
+
+        tournaments: list[Tournament] = await db_cog.get_tournaments_by_channel(
+            ctx.channel.id
+        )
+
+        if tournaments:
+            await ctx.send(
+                "Tournaments:\n"
+                + "\n".join([tournament.name for tournament in tournaments])
+            )
+        else:
+            msg = ctx.send("There are no tournaments in this channel.")
+            await asyncio.sleep(5)
+            await msg.delete()
 
     @commands.command(
         name="match_start",

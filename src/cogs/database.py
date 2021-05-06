@@ -219,6 +219,19 @@ class DatabaseCog(commands.Cog, name="Database"):
         if tr is not None:
             return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4])
 
+    async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
+        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+            async with db.execute(
+                "SELECT * FROM tournaments WHERE channel=:channel;",
+                {
+                    "channel": channel,
+                },
+            ) as cur:
+                tournaments: list[Match] = []
+                async for tr in cur:
+                    tournaments.append(Tournament(tr[0], tr[1], tr[2], tr[3], tr[4]))
+        return tournaments
+
     async def get_running_tournament(self, channel: int) -> Tournament:
         async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
             async with db.execute(
