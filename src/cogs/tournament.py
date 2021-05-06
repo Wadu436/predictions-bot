@@ -158,7 +158,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         content = (
             f"{content_header}{content_scoring_table}{content_leaderboard}".strip()
         )
-        content += "\n------------------------------------------------------------------------------------------------"
 
         return content
 
