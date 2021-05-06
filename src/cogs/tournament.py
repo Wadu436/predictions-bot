@@ -85,13 +85,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
             )
             db_cog.insert_usermatch(usermatch)
 
-    def calculate_leaderboard(self, tournament: Tournament) -> list[tuple[int, int]]:
-        db_cog = self.bot.get_cog("Database")
+    def calculate_leaderboard(self, tournament: Tournament) -> list[tuple[int, str]]:
+        db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         # Scoring table
 
         finished_matches: list[Match] = db_cog.get_matches_by_state(tournament.id, 0)
-        user_scores: dict[int, int] = dict()  # (user_id, score)
+        user_scores: dict[int, tuple[int, str]] = dict()  # (user_id, (score, name))
         for match in finished_matches:
             team_result = match.result
             games_result = match.games
@@ -100,7 +100,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
             )
 
             for um in usermatches:
-                user_score = user_scores.get(um.user_id, 0)
+                user_entry = user_scores.get(um.user_id, (0, None))
+                user_score = user_entry[0]
+                user_name = (
+                    db_cog.get_user(um.user_id).name
+                    if user_entry[1] is None
+                    else user_entry[1]
+                )
+
                 if team_result == um.team:
                     if match.bestof == 1:
                         user_score += self.score_table["bo1_team"]
@@ -114,9 +121,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
                         user_score += self.score_table["bo3_games"]
                     elif match.bestof == 5:
                         user_score += self.score_table["bo5_games"]
-                user_scores[um.user_id] = user_score
+                user_scores[um.user_id] = (user_score, user_name)
 
-        return sorted(list(user_scores.items()), key=lambda x: x[1], reverse=True)
+        scores_name_sorted = sorted(list(user_scores.values()), key=lambda x: x[1])
+        return sorted(scores_name_sorted, key=lambda x: x[0], reverse=True)
 
     async def generate_tournament_message(self, tournament: Tournament):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
@@ -146,10 +154,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Leaderboard
         leaderboard = self.calculate_leaderboard(tournament)
         leaderboard_strings = []
+        rank = 0
+        prev_rank_score = -1
+        players = 0
         if len(leaderboard) > 0:
             for entry in leaderboard:
-                user = db_cog.get_user(entry[0])
-                leaderboard_strings.append(f"{user.name}: {entry[1]}")
+                user_score, user_name = entry
+
+                players += 1
+                if prev_rank_score != user_score:
+                    prev_rank_score = user_score
+                    rank = players
+
+                leaderboard_strings.append(f"{rank} - {user_name}: {user_score}")
             leaderboard_str = "\n".join(leaderboard_strings)
         else:
             leaderboard_str = " "
