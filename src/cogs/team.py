@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+from src.cogs.database import DatabaseCog, Team
 from src.converters import CodeConverter, EmojiConverter
 
 
@@ -25,19 +26,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         *,
         name: str,
     ):
-        db_cog = ctx.bot.get_cog("Database")
-        cur = db_cog.con.cursor()
-
-        cur.execute(
-            "INSERT INTO teams VALUES (:name, :code, :emoji, :guild);",
-            {
-                "name": name.strip(),
-                "code": code,
-                "emoji": emoji,
-                "guild": ctx.guild.id,
-            },
-        )
-
+        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
+        await db_cog.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
         await ctx.send(f"Added team `{code}`")
 
     @commands.command(
@@ -49,27 +39,12 @@ class TeamsCog(commands.Cog, name="Teams"):
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
     async def team_remove(self, ctx, code: CodeConverter(True)):
-        db_cog = ctx.bot.get_cog("Database")
-        cur = db_cog.con.cursor()
+        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
 
-        cur.execute(
-            "SELECT * FROM teams WHERE code = :code AND guild = :guild;",
-            {
-                "code": code,
-                "guild": ctx.guild.id,
-            },
-        )
-        team_name = cur.fetchone()[0]
+        team: Team = await db_cog.get_team(code, ctx.guild.id)
+        await db_cog.delete_team(team)
 
-        cur.execute(
-            "DELETE FROM teams WHERE code = :code AND guild = :guild;",
-            {
-                "code": code,
-                "guild": ctx.guild.id,
-            },
-        )
-
-        await ctx.send(f"Deleted team {team_name}.")
+        await ctx.send(f"Deleted team {team.name}.")
 
     @commands.command(
         name="team_list",
@@ -79,15 +54,9 @@ class TeamsCog(commands.Cog, name="Teams"):
     )
     @commands.guild_only()
     async def team_list(self, ctx):
-        db_cog = ctx.bot.get_cog("Database")
-        cur = db_cog.con.cursor()
+        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
 
-        teams = list(
-            cur.execute(
-                "SELECT * FROM teams WHERE guild = :guild;",
-                {"guild": ctx.guild.id},
-            ),
-        )
+        teams = await db_cog.get_teams_by_guild(ctx.guild.id)
 
         if not (len(teams) > 0):
             await ctx.send("`No teams found.`")
@@ -97,13 +66,10 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         for team in teams:
             embed.add_field(
-                name=f"{team[2]} {team[0]}",
-                value=f"Code: `{team[1]}`",
+                name=f"{team.emoji} {team.name}",
+                value=f"Code: `{team.code}`",
             )
         await ctx.send(embed=embed)
-
-    def get_team(self, server_id, code):
-        return self.teams.get(server_id, {}).get(code, None)
 
 
 def setup(bot):

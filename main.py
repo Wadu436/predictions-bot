@@ -19,6 +19,11 @@ logging.basicConfig(
     ],
 )
 
-if __name__ == "__main__":
+
+def main():
     src.bot.PREFIX = "+"
     src.bot.launch()
+
+
+if __name__ == "__main__":
+    main()

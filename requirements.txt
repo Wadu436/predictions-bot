@@ -1,3 +1,4 @@
 -i https://pypi.org/simple
 discord-py>=1.7.2
 emojis>=0.6.0
+aiosqlite>=0.17.0 
