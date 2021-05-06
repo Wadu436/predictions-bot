@@ -542,6 +542,53 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.message.delete()
         await self.update_tournament_message(tournament)
 
+    @commands.command(
+        name="match_fix",
+        brief="Ends a match.",
+        description="Fixes emotes on a match.",
+        aliases=["m_fix"],
+        usage="<name>",
+    )
+    @commands.guild_only()
+    @commands.is_owner()
+    async def match_fix(self, ctx: commands.Context, *, name: str):
+        db_cog: DatabaseCog = self.bot.get_cog("Database")
+
+        tournament: Tournament = await db_cog.get_running_tournament(ctx.channel.id)
+        if tournament is None:
+            msg = await ctx.send("No tournament is running.")
+            await asyncio.sleep(5)
+            await msg.delete()
+            return
+
+        match: Match = await db_cog.get_match(name, tournament.id)
+        if match is None:
+            msg = await ctx.send("Match does not exist.")
+            await asyncio.sleep(5)
+            await msg.delete()
+            return
+
+        message: discord.Message = await ctx.channel.fetch_message(match.message)
+
+        for reaction in message.reactions:
+            if reaction.me:
+                await reaction.remove(self.bot.user)
+
+        team1: Team = await db_cog.get_team(match.team1, match.guild)
+        team2: Team = await db_cog.get_team(match.team2, match.guild)
+
+        await message.add_reaction(team1.emoji)
+        await message.add_reaction(team2.emoji)
+
+        # Add Games reacts
+        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+
+        if match.bestof > 1:
+            for i in range(math.floor(match.bestof / 2), match.bestof):
+                await message.add_reaction(games_emojis[i])
+
+        await ctx.message.delete()
+
     # ----------------------------- EVENTS -----------------------------
 
     @commands.Cog.listener()
