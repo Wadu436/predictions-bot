@@ -568,21 +568,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         # Fetch channel and message
         channel = self.bot.get_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
+        message: discord.Message = await channel.fetch_message(payload.message_id)
 
         team1: Team = await db_cog.get_team(match.team1, match.guild)
         team2: Team = await db_cog.get_team(match.team2, match.guild)
 
         to_remove = set()
         emoji = str(payload.emoji)
-        reactions = {str(reaction) for reaction in message.reactions}
 
         # Team
         team_emoji = {team1.emoji, team2.emoji}
         if emoji in team_emoji:
-            if emoji in reactions:
-                team_emoji.remove(emoji)
-                to_remove.update(team_emoji)
+            team_emoji.remove(emoji)
+            to_remove.update(team_emoji)
 
         # Games
         if match.bestof > 1:
@@ -590,12 +588,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
             games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
             games_emojis = set(games_emojis)
             if emoji in games_emojis:
-                if emoji in reactions:
-                    games_emojis.remove(emoji)
-                    to_remove.update(games_emojis)
+                games_emojis.remove(emoji)
+                to_remove.update(games_emojis)
 
-        for reaction in to_remove:
-            await message.remove_reaction(reaction, discord.Object(payload.user_id))
+        for reaction in message.reactions:
+            if str(reaction) not in to_remove:
+                continue
+            react_user = await reaction.users().get(id=payload.user_id)
+            if react_user is not None:
+                await message.remove_reaction(reaction, discord.Object(payload.user_id))
 
 
 def setup(bot):
