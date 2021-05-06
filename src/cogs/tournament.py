@@ -98,7 +98,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         players = 0
         if len(leaderboard) > 0:
             for entry in leaderboard:
-                user_score, user_name = entry
+                user_name, user_score = entry
 
                 players += 1
                 if prev_rank_score != user_score:
