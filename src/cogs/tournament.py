@@ -96,6 +96,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
         rank = 0
         prev_rank_score = -1
         players = 0
+
+        rank_size = 0
+        name_size = 0
+        score_size = 0
+        entries = []
+
         if len(leaderboard) > 0:
             for entry in leaderboard:
                 user_name, user_score = entry
@@ -105,7 +111,17 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     prev_rank_score = user_score
                     rank = players
 
-                leaderboard_strings.append(f"{rank} - {user_name}: {user_score}")
+                rank_size = max(len(str(rank)), rank_size)
+                name_size = max(len(str(user_name)), name_size)
+                score_size = max(len(str(user_score)), score_size)
+
+                entries.append([rank, user_name, user_score])
+
+            for entry in entries:
+                rank, user_name, user_score = entry
+                leaderboard_strings.append(
+                    f"{rank:>{rank_size}} - {user_name:<{name_size}} {user_score:>{score_size}} points"
+                )
             leaderboard_str = "\n".join(leaderboard_strings)
         else:
             leaderboard_str = ""
