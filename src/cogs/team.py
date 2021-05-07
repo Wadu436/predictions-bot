@@ -1,3 +1,5 @@
+from typing import Optional
+
 import discord
 from discord.ext import commands
 
@@ -41,8 +43,9 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def team_remove(self, ctx, code: CodeConverter(True)):
         db_cog: DatabaseCog = ctx.bot.get_cog("Database")
 
-        team: Team = await db_cog.get_team(code, ctx.guild.id)
-        await db_cog.delete_team(team)
+        team: Optional[Team] = await db_cog.get_team(code, ctx.guild.id)
+        if team is not None:
+            await db_cog.delete_team(team)
 
         await ctx.send(f"Deleted team {team.name}.")
 

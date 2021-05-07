@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import math
-import typing
 import uuid
+from typing import Optional
 
 import aiosqlite
 import discord
@@ -26,7 +26,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     # ----------------------------- UTILITY ----------------------------
 
-    async def save_votes(self, match: Match, tournament: Tournament):
+    async def save_votes(self, match: Match, tournament: Tournament) -> bool:
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         channel = self.bot.get_channel(tournament.channel)
@@ -86,6 +86,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 games_dict.get(user.id, 0),
             )
             await db_cog.insert_usermatch(usermatch)
+        return True
 
     async def generate_leaderboard(self, tournament: Tournament) -> str:
         db_cog = self.bot.get_cog("Database")
@@ -135,7 +136,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             return ""
         guild = channel.guild
 
-        teams: dict[Team] = dict()
+        teams: dict[str, Team] = dict()
         for team in await db_cog.get_teams_by_guild(guild.id):
             teams[team.code] = team
 
@@ -164,7 +165,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def generate_match_message(self, match: Match):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        teams: dict[Team] = dict()
+        teams: dict[str, Team] = dict()
         for team in await db_cog.get_teams_by_guild(match.guild):
             teams[team.code] = team
 
@@ -211,7 +212,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def update_match_message(self, match):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        tournament: Tournament = await db_cog.get_tournament(match.tournament)
+        tournament: Optional[Tournament] = await db_cog.get_tournament(match.tournament)
 
         tournament_channel = self.bot.get_channel(tournament.channel)
         if tournament_channel is None:
@@ -319,7 +320,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def tournament_show(self, ctx, *, name: typing.Optional[str]):
+    async def tournament_show(self, ctx, *, name: Optional[str]):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         if name is not None:
@@ -403,8 +404,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             await msg.delete()
             return
 
-        team1: Team = await db_cog.get_team(team1_code, ctx.guild.id)
-        team2: Team = await db_cog.get_team(team2_code, ctx.guild.id)
+        team1: Optional[Team] = await db_cog.get_team(team1_code, ctx.guild.id)
+        team2: Optional[Team] = await db_cog.get_team(team2_code, ctx.guild.id)
 
         # Send message
         message = await ctx.send("Match is starting...")
@@ -569,14 +570,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def match_fix(self, ctx: commands.Context, *, name: str):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        tournament: Tournament = await db_cog.get_running_tournament(ctx.channel.id)
+        tournament: Optional[Tournament] = await db_cog.get_running_tournament(
+            ctx.channel.id
+        )
         if tournament is None:
             msg = await ctx.send("No tournament is running.")
             await asyncio.sleep(5)
             await msg.delete()
             return
 
-        match: Match = await db_cog.get_match(name, tournament.id)
+        match: Optional[Match] = await db_cog.get_match(name, tournament.id)
         if match is None:
             msg = await ctx.send("Match does not exist.")
             await asyncio.sleep(5)
@@ -589,8 +592,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if reaction.me:
                 await reaction.remove(self.bot.user)
 
-        team1: Team = await db_cog.get_team(match.team1, match.guild)
-        team2: Team = await db_cog.get_team(match.team2, match.guild)
+        team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
+        team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
 
         await message.add_reaction(team1.emoji)
         await message.add_reaction(team2.emoji)
@@ -616,7 +619,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             return False
 
         # We only care about running matches
-        match: Match = await db_cog.get_match_by_message(payload.message_id)
+        match: Optional[Match] = await db_cog.get_match_by_message(payload.message_id)
         if match is None:
             return
         if match.running != 1:
@@ -626,8 +629,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         channel = self.bot.get_channel(payload.channel_id)
         message: discord.Message = await channel.fetch_message(payload.message_id)
 
-        team1: Team = await db_cog.get_team(match.team1, match.guild)
-        team2: Team = await db_cog.get_team(match.team2, match.guild)
+        team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
+        team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
 
         to_remove = set()
         emoji = str(payload.emoji)
