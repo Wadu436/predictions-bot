@@ -142,7 +142,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     user_percent,
                 ) = entry
                 leaderboard_strings.append(
-                    f"{rank:>{rank_size}} - {user_name:<{name_size}} {user_score:>{score_size}} points, {user_correct:>{correct_size}} correct {user_percent:>{percent_size}}"
+                    f"{rank:>{rank_size}}  -  {user_name:<{name_size}} {user_score:>{score_size}} points  -  {user_correct:>{correct_size}} correct {user_percent:>{percent_size}}"
                 )
             leaderboard_str = "\n".join(leaderboard_strings)
         else:
