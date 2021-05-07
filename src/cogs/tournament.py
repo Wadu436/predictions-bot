@@ -100,27 +100,48 @@ class TournamentCog(commands.Cog, name="Tournament"):
         rank_size = 0
         name_size = 0
         score_size = 0
+        correct_size = 0
+        percent_size = 0
         entries = []
 
         if len(leaderboard) > 0:
             for entry in leaderboard:
-                user_name, user_score = entry
+                user_name, user_score, user_correct, user_total, user_percent = entry
 
                 players += 1
                 if prev_rank_score != user_score:
                     prev_rank_score = user_score
                     rank = players
 
+                user_correct = f"{user_correct}/{user_total}"
+                user_percent = f"({user_percent:.1f}%)"
+
                 rank_size = max(len(str(rank)), rank_size)
                 name_size = max(len(str(user_name)), name_size)
                 score_size = max(len(str(user_score)), score_size)
+                correct_size = max(len(str(user_correct)), correct_size)
+                percent_size = max(len(str(user_percent)), percent_size)
 
-                entries.append([rank, user_name, user_score])
+                entries.append(
+                    [
+                        rank,
+                        user_name,
+                        user_score,
+                        user_correct,
+                        user_percent,
+                    ]
+                )
 
             for entry in entries:
-                rank, user_name, user_score = entry
+                (
+                    rank,
+                    user_name,
+                    user_score,
+                    user_correct,
+                    user_percent,
+                ) = entry
                 leaderboard_strings.append(
-                    f"{rank:>{rank_size}} - {user_name:<{name_size}} {user_score:>{score_size}} points"
+                    f"{rank:>{rank_size}} - {user_name:<{name_size}} {user_score:>{score_size}} points, {user_correct:>{correct_size}} correct {user_percent:>{percent_size}}"
                 )
             leaderboard_str = "\n".join(leaderboard_strings)
         else:
