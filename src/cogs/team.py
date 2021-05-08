@@ -3,6 +3,7 @@ from typing import Optional
 import discord
 from discord.ext import commands
 
+from src import decorators
 from src.cogs.database import DatabaseCog, Team
 from src.converters import CodeConverter, EmojiConverter
 
@@ -20,17 +21,17 @@ class TeamsCog(commands.Cog, name="Teams"):
         name="create",
         brief="Creates a new team.",
         description="Creates a new team and adds it to this server's list of teams. The code cannot contain spaces. You can only use default discord emoji or emoji from this server.",
-        usage="<name> <code> <emoji> ",
+        usage="<name> <code> <emoji>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
+    @decorators.regex_arguments("(.+) (\\S+) (\\S+)")
     async def team_create(
         self,
         ctx,
+        name: str,
         code: CodeConverter(False),
         emoji: EmojiConverter,
-        *,
-        name: str,
     ):
         db_cog: DatabaseCog = ctx.bot.get_cog("Database")
         await db_cog.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
@@ -40,6 +41,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         name="remove",
         brief="Removes a team.",
         description="Removes a team from this server's list of teams.",
+        usage="<code>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -56,6 +58,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         name="list",
         brief="Lists available teams.",
         description="Lists all teams on this server.",
+        usage="",
     )
     @commands.guild_only()
     async def team_list(self, ctx):

@@ -8,6 +8,7 @@ import aiosqlite
 import discord
 from discord.ext import commands
 
+from src import decorators
 from src.cogs.database import DatabaseCog, Match, Team, Tournament, User, UserMatch
 from src.converters import BestOfXConverter, CodeConverter
 
@@ -265,7 +266,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="start",
         brief="Starts a tournament.",
-        description="Creates a new tournament in this channel.",
+        description="Creates a new tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
         usage="<tournament name>",
     )
     @commands.guild_only()
@@ -346,8 +347,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="show",
         brief="Shows info on a tournament.",
-        description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.",
-        aliases=["tr_show"],
+        description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.\n\nArguments:\n-Tournament name can contain spaces.",
+        usage="<tournament name>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -376,6 +377,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="list",
         brief="Lists tournaments in a channel.",
         description="Lists all current and past tournaments in this channel.",
+        usage="",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -399,19 +401,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="start",
         brief="Starts a match.",
-        description="Creates a new match between two teams. Match is Best Of 1, 3, or 5.",
-        usage="<short code team 1> <short code team 2> bo<X> <match name>",
+        description="Creates a new match between two teams.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-X must be 1, 3 or 5.",
+        usage="<match name> <short code team 1> <short code team 2> bo<X>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
+    @decorators.regex_arguments("(.+) (\\S+) (\\S+) (\\S+)")
     async def match_start(
         self,
         ctx,
+        name: str,
         team1_code: CodeConverter(True),
         team2_code: CodeConverter(True),
         bestof: BestOfXConverter,
-        *,
-        name: str,
     ):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -477,7 +479,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="close",
         brief="Closes predictions for a match.",
-        description="Closes new predictions on the specified match.",
+        description="Closes new predictions on the specified match.\n\nArguments:\n-Match name can contain spaces.",
         usage="<name>",
     )
     @commands.guild_only()
@@ -512,18 +514,18 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="end",
         brief="Ends a match.",
-        description="Ends the match.",
-        usage="<winning team code> <amount of games> <name>",
+        description="Ends the match.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-Played games depends on what type of match it is (BO1, 3 or 5).",
+        usage="<name> <winning team code> <played games>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
+    @decorators.regex_arguments("(.+) (\\S+) (\\S+)")
     async def match_end(
         self,
         ctx,
+        name: str,
         code: CodeConverter(True),
         num_games: int,
-        *,
-        name,
     ):
         # Validate input
         db_cog: DatabaseCog = self.bot.get_cog("Database")
@@ -588,7 +590,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="fix",
         brief="Fix match.",
-        description="Fixes emotes on a match.",
+        description="Fixes emotes on a match.\n\nArguments:\n-Match name can contain spaces.",
         usage="<name>",
     )
     @commands.guild_only()
