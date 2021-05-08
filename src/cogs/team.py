@@ -11,12 +11,16 @@ class TeamsCog(commands.Cog, name="Teams"):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(
-        name="team_create",
+    @commands.group(name="team", aliases=["tm"])
+    async def team_group(self, ctx: commands.Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.invoked_with)
+
+    @team_group.command(
+        name="create",
         brief="Creates a new team.",
         description="Creates a new team and adds it to this server's list of teams. The code cannot contain spaces. You can only use default discord emoji or emoji from this server.",
-        aliases=["team_add", "tm_create", "tm_add"],
-        usage="<code> <emoji> <name>",
+        usage="<name> <code> <emoji> ",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -32,11 +36,10 @@ class TeamsCog(commands.Cog, name="Teams"):
         await db_cog.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
         await ctx.send(f"Added team `{code}`")
 
-    @commands.command(
-        name="team_remove",
+    @team_group.command(
+        name="remove",
         brief="Removes a team.",
         description="Removes a team from this server's list of teams.",
-        aliases=["team_delete", "tm_remove", "tm_delete"],
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -49,10 +52,9 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         await ctx.send(f"Deleted team {team.name}.")
 
-    @commands.command(
-        name="team_list",
+    @team_group.command(
+        name="list",
         brief="Lists available teams.",
-        aliases=["tm_list"],
         description="Lists all teams on this server.",
     )
     @commands.guild_only()

@@ -236,7 +236,7 @@ async def on_command_error(ctx, error):
         return
 
     if isinstance(error, commands.UserInputError):
-        await ctx.send_help(ctx.invoked_with)
+        await ctx.send_help(ctx.command)
         return
 
     if isinstance(error, commands.CommandNotFound):

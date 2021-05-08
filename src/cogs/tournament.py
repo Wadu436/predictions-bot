@@ -248,13 +248,24 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         await match_message.edit(content=content)
 
+    # ----------------------------- GROUPS -----------------------------
+
+    @commands.group(name="tournament", aliases=["tr"])
+    async def tournament_group(self, ctx: commands.Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.invoked_with)
+
+    @commands.group(name="match", aliases=["m"])
+    async def match_group(self, ctx: commands.Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.invoked_with)
+
     # ---------------------------- COMMANDS ----------------------------
 
-    @commands.command(
-        name="tournament_start",
+    @tournament_group.command(
+        name="start",
         brief="Starts a tournament.",
         description="Creates a new tournament in this channel.",
-        aliases=["tr_start"],
         usage="<tournament name>",
     )
     @commands.guild_only()
@@ -296,11 +307,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
-    @commands.command(
-        name="tournament_end",
+    @tournament_group.command(
+        name="end",
         brief="Ends a tournament.",
         description="Ends the running tournament.",
-        aliases=["tr_end"],
         usage="",
     )
     @commands.guild_only()
@@ -333,8 +343,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.send(f"Tournament **{tournament.name}** ended.")
         await ctx.message.delete()
 
-    @commands.command(
-        name="tournament_show",
+    @tournament_group.command(
+        name="show",
         brief="Shows info on a tournament.",
         description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.",
         aliases=["tr_show"],
@@ -362,11 +372,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.send(content + "\n`This message does not get updated.`")
         await ctx.message.delete()
 
-    @commands.command(
-        name="tournament_list",
+    @tournament_group.command(
+        name="list",
         brief="Lists tournaments in a channel.",
         description="Lists all current and past tournaments in this channel.",
-        aliases=["tr_list"],
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -387,11 +396,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
             await asyncio.sleep(5)
             await msg.delete()
 
-    @commands.command(
-        name="match_start",
+    @match_group.command(
+        name="start",
         brief="Starts a match.",
         description="Creates a new match between two teams. Match is Best Of 1, 3, or 5.",
-        aliases=["m_start"],
         usage="<short code team 1> <short code team 2> bo<X> <match name>",
     )
     @commands.guild_only()
@@ -466,11 +474,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
-    @commands.command(
-        name="match_close",
+    @match_group.command(
+        name="close",
         brief="Closes predictions for a match.",
         description="Closes new predictions on the specified match.",
-        aliases=["m_close"],
         usage="<name>",
     )
     @commands.guild_only()
@@ -502,11 +509,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
-    @commands.command(
-        name="match_end",
+    @match_group.command(
+        name="end",
         brief="Ends a match.",
         description="Ends the match.",
-        aliases=["m_end"],
         usage="<winning team code> <amount of games> <name>",
     )
     @commands.guild_only()
@@ -579,11 +585,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.message.delete()
         await self.update_tournament_message(tournament)
 
-    @commands.command(
-        name="match_fix",
-        brief="Ends a match.",
+    @match_group.command(
+        name="fix",
+        brief="Fix match.",
         description="Fixes emotes on a match.",
-        aliases=["m_fix"],
         usage="<name>",
     )
     @commands.guild_only()

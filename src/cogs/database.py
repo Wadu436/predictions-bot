@@ -552,7 +552,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     parameter_dict,
                 )
                 leaderboard = await cur.fetchall()
-        return [(row[0], row[1]) for row in leaderboard]
+        return leaderboard
 
 
 def setup(bot):
