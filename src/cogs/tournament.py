@@ -173,7 +173,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         leaderboard_str = await self.generate_leaderboard(tournament)
         if leaderboard_str:
-            content_leaderboard = f"***Leaderboard***\n```{leaderboard_str}```\n"
+            content_leaderboard = f"***Leaderboard***\n```c\n{leaderboard_str}```\n"
         else:
             content_leaderboard = ""
 
