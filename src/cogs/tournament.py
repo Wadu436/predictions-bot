@@ -252,12 +252,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.group(name="tournament", aliases=["tr"])
     async def tournament_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.invoked_with)
+            await ctx.send_help(ctx.command)
 
     @commands.group(name="match", aliases=["m"])
     async def match_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.invoked_with)
+            await ctx.send_help(ctx.command)
 
     # ---------------------------- COMMANDS ----------------------------
 
