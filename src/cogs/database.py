@@ -379,6 +379,36 @@ class DatabaseCog(commands.Cog, name="Database"):
                     )
         return matches
 
+    async def get_matches_by_team(
+        self,
+        team: Team,
+    ) -> list[Match]:
+        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+            async with db.execute(
+                "SELECT * FROM matches WHERE (team1 = :team OR team2 = :team) AND guild = :guild;",
+                {
+                    "team": team.code,
+                    "guild": team.guild,
+                },
+            ) as cur:
+                matches: list[Match] = []
+                async for mr in cur:
+                    matches.append(
+                        Match(
+                            mr[0],
+                            mr[1],
+                            mr[2],
+                            mr[3],
+                            mr[4],
+                            mr[5],
+                            mr[6],
+                            mr[7],
+                            mr[8],
+                            mr[9],
+                        ),
+                    )
+        return matches
+
     async def get_matches_by_state(
         self,
         tournament: uuid.UUID,
