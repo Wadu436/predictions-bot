@@ -1,6 +1,7 @@
 import logging
+import math
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import PARSE_DECLTYPES
 from typing import Any, Optional
@@ -39,6 +40,10 @@ class Tournament:
 
 @dataclass
 class Match:
+    def __post_init__(self):
+        self.win_games = math.ceil(self.bestof / 2)
+        self.lose_games = self.games - self.win_games
+
     name: str
     guild: int
     message: int
@@ -49,6 +54,8 @@ class Match:
     team2: str
     tournament: uuid.UUID
     bestof: int
+    win_games: int = field(init=False)
+    lose_games: int = field(init=False)
 
 
 @dataclass
@@ -342,6 +349,35 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[8],
                 mr[9],
             )
+
+    async def get_matches_by_tournament(
+        self,
+        tournament: uuid.UUID,
+    ) -> list[Match]:
+        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+            async with db.execute(
+                "SELECT * FROM matches WHERE tournament=:tournament",
+                {
+                    "tournament": tournament,
+                },
+            ) as cur:
+                matches: list[Match] = []
+                async for mr in cur:
+                    matches.append(
+                        Match(
+                            mr[0],
+                            mr[1],
+                            mr[2],
+                            mr[3],
+                            mr[4],
+                            mr[5],
+                            mr[6],
+                            mr[7],
+                            mr[8],
+                            mr[9],
+                        ),
+                    )
+        return matches
 
     async def get_matches_by_state(
         self,

@@ -202,15 +202,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 f"{team1.emoji} {team1.name} vs {team2.name} {team2.emoji}"
             )
         else:
-            win_games = math.ceil(match.bestof / 2)
-            lose_games = match.games - win_games
             if match.result == 1:
-                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {win_games}-{lose_games}"
+                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {match.win_games}-{match.lose_games}"
                 match_message_footer = (
                     f"**{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji}"
                 )
             else:
-                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {lose_games}-{win_games}"
+                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {match.lose_games}-{match.win_games}"
                 match_message_footer = (
                     f"{team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}**"
                 )
@@ -388,15 +386,20 @@ class TournamentCog(commands.Cog, name="Tournament"):
             ctx.channel.id
         )
 
+        paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
+
         if tournaments:
-            await ctx.send(
-                "Tournaments:\n"
-                + "\n".join([tournament.name for tournament in tournaments])
-            )
+            paginator.add_line("**Tournaments:**")
+            for tournament in tournaments:
+                if tournament.running == 1:
+                    paginator.add_line(tournament.name)
+                if tournament.running == 0:
+                    paginator.add_line(tournament.name + " - Ended")
         else:
-            msg = ctx.send("There are no tournaments in this channel.")
-            await asyncio.sleep(5)
-            await msg.delete()
+            paginator.add_line("There are no tournaments in this channel.")
+
+        for page in paginator.pages:
+            await ctx.send(page)
 
     @match_group.command(
         name="start",
@@ -634,6 +637,83 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 await message.add_reaction(games_emojis[i])
 
         await ctx.message.delete()
+
+    @match_group.command(
+        name="list",
+        brief="Lists all matches in a tournament.",
+        description="Lists all current and past matches in the provided tournament. If no tournament is provided, lists matches in the currently running tournament.",
+        usage="[tournament name]",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def matches_list(self, ctx, *, name: Optional[str]):
+        db_cog: DatabaseCog = self.bot.get_cog("Database")
+
+        tournament: Tournament
+        if name is None:
+            tournament = await db_cog.get_running_tournament(ctx.channel.id)
+            if tournament is None:
+                await ctx.send(
+                    "There is no currently running tournament in this channel."
+                )
+        else:
+            tournament: Tournament = await db_cog.get_tournament_by_name(
+                name, ctx.channel.id
+            )
+            if tournament is None:
+                await ctx.send("No tournament by that name exists in this channel.")
+
+        channel = self.bot.get_channel(tournament.channel)
+        if channel is None:
+            return ""
+        guild = channel.guild
+
+        teams: dict[str, Team] = dict()
+        for team in await db_cog.get_teams_by_guild(guild.id):
+            teams[team.code] = team
+
+        past_matches: Match = await db_cog.get_matches_by_state(tournament.id, 0)
+        closed_matches: Match = await db_cog.get_matches_by_state(tournament.id, 2)
+        active_matches: Match = await db_cog.get_matches_by_state(tournament.id, 1)
+
+        paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
+        paginator.add_line(f"***{tournament.name} Matches***")
+
+        if past_matches:
+            paginator.add_line("")
+            paginator.add_line(f"**Ended Matches:**")
+            for match in past_matches:
+                team1 = teams[match.team1]
+                team2 = teams[match.team2]
+
+                if match.result == 1:
+                    match_content = f"{match.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
+                elif match.result == 2:
+                    match_content = f"{match.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
+                paginator.add_line(match_content)
+
+        if closed_matches:
+            paginator.add_line("")
+            paginator.add_line(f"**Closed Matches:**")
+            for match in closed_matches:
+                team1 = teams[match.team1]
+                team2 = teams[match.team2]
+                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof} - Closed"
+                paginator.add_line(match_content)
+        if active_matches:
+            paginator.add_line("")
+            paginator.add_line(f"**Open Matches:**")
+            for match in active_matches:
+                team1 = teams[match.team1]
+                team2 = teams[match.team2]
+                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
+                paginator.add_line(match_content)
+
+        if not (past_matches or closed_matches or active_matches):
+            paginator.add_line("There are no matches in this tournament.")
+
+        for page in paginator.pages:
+            await ctx.send(page)
 
     # ----------------------------- EVENTS -----------------------------
 
