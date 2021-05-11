@@ -633,7 +633,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             match.result = 2
 
         await db_cog.update_match(match)
-        match = db_cog.get_match(
+        match = await db_cog.get_match(
             match.name, match.tournament
         )  # Refresh match (winning and losing games)
 
@@ -662,25 +662,30 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if match is None:
             raise MatchDoesntExist()
 
-        message: discord.Message = await ctx.channel.fetch_message(match.message)
+        if match.running == 1:
+            # Fix emoji
+            message: discord.Message = await ctx.channel.fetch_message(match.message)
 
-        for reaction in message.reactions:
-            if reaction.me:
-                await reaction.remove(self.bot.user)
+            
+            for reaction in message.reactions:
+                if reaction.me:
+                    await reaction.remove(self.bot.user)
 
-        team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
-        team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
 
-        await message.add_reaction(team1.emoji)
-        await message.add_reaction(team2.emoji)
+            team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
+            team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
 
-        # Add Games reacts
-        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+            await message.add_reaction(team1.emoji)
+            await message.add_reaction(team2.emoji)
 
-        if match.bestof > 1:
-            for i in range(math.floor(match.bestof / 2), match.bestof):
-                await message.add_reaction(games_emojis[i])
+            # Add Games reacts
+            games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
+            if match.bestof > 1:
+                for i in range(math.floor(match.bestof / 2), match.bestof):
+                    await message.add_reaction(games_emojis[i])
+
+        # Fix name
         await self.update_match_message(match)
 
     @match_group.command(
