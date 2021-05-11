@@ -319,13 +319,23 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     # ----------------------------- GROUPS -----------------------------
 
-    @commands.group(name="tournament", aliases=["tr"])
+    @commands.group(
+        name="tournament",
+        brief="Commands for creating, ending and listing information on a tournament.",
+        description="Commands for creating, ending and listing information on a tournament.",
+        aliases=["tr"],
+    )
     @commands.guild_only()
     async def tournament_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.group(name="match", aliases=["m"])
+    @commands.group(
+        name="match",
+        brief="Commands for creating, closing, ending and listing information on a match.",
+        description="Commands for creating, closing, ending and listing information on a match.",
+        aliases=["m"],
+    )
     @commands.guild_only()
     async def match_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
@@ -336,7 +346,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="start",
         brief="Starts a tournament.",
-        description="Creates a new tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
+        description="Starts a tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
         aliases=["s"],
         usage="<tournament name>",
     )
@@ -371,7 +381,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @tournament_group.command(
         name="end",
-        brief="Ends a tournament.",
+        brief="Ends the running tournament.",
         description="Ends the running tournament.",
         aliases=["e"],
         usage="",
@@ -533,7 +543,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="close",
         brief="Closes predictions for a match.",
-        description="Closes new predictions on the specified match.\n\nArguments:\n-Match name can contain spaces.",
+        description="Closes predictions on the specified match.\n\nArguments:\n-Match name can contain spaces.",
         aliases=["c"],
         usage="<name>",
     )
