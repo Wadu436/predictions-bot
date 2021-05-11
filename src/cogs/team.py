@@ -62,6 +62,12 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         team: Team = await db_cog.get_team(code, ctx.guild.id)
 
+        if name == team.name:
+            raise EditException(
+                team,
+                "New name is the same as the current name.",
+            )
+
         original_name = team.name
         team.name = name
 
@@ -91,6 +97,12 @@ class TeamsCog(commands.Cog, name="Teams"):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         team: Team = await db_cog.get_team(old_code, ctx.guild.id)
+
+        if new_code == old_code:
+            raise EditException(
+                team,
+                "New code is the same as the current code.",
+            )
 
         team.code = new_code
 
