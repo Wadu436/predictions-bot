@@ -25,7 +25,7 @@ class TeamsCog(commands.Cog, name="Teams"):
 
     @commands.group(
         name="team",
-        brief="Commands for creating, updating, listing or deleting teams.",
+        brief="Commands for interacting with teams.",
         description="Commands for creating, updating, listing or deleting teams.",
         aliases=["tm"],
     )

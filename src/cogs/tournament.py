@@ -321,7 +321,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @commands.group(
         name="tournament",
-        brief="Commands for creating, ending and listing information on a tournament.",
+        brief="Commands for interacting with tournaments.",
         description="Commands for creating, ending and listing information on a tournament.",
         aliases=["tr"],
     )
@@ -332,7 +332,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @commands.group(
         name="match",
-        brief="Commands for creating, closing, ending and listing information on a match.",
+        brief="Commands for interacting with matches.",
         description="Commands for creating, closing, ending and listing information on a match.",
         aliases=["m"],
     )
