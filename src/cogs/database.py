@@ -36,6 +36,7 @@ class Tournament:
     id: uuid.UUID
     name: str
     channel: int
+    guild: int
     message: int
     running: int
 
@@ -214,24 +215,24 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as cur:
                 tr = await cur.fetchone()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def get_tournament_by_name(
         self,
         name: str,
-        channel: int,
+        guild: int,
     ) -> Optional[Tournament]:
         async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
             async with db.execute(
-                "SELECT * FROM tournaments WHERE name=:name AND channel=:channel;",
+                "SELECT * FROM tournaments WHERE name=:name AND guild=:guild;",
                 {
                     "name": name,
-                    "channel": channel,
+                    "guild": guild,
                 },
             ) as cur:
                 tr = await cur.fetchone()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
         async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
@@ -243,7 +244,9 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as cur:
                 tournaments: list[Tournament] = []
                 async for tr in cur:
-                    tournaments.append(Tournament(tr[0], tr[1], tr[2], tr[3], tr[4]))
+                    tournaments.append(
+                        Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
+                    )
         return tournaments
 
     async def get_running_tournament(self, channel: int) -> Optional[Tournament]:
@@ -256,17 +259,18 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as cur:
                 tr = await cur.fetchone()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def update_tournament(self, tournament: Tournament) -> None:
         async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
             await db.execute("PRAGMA foreign_keys = ON;")
             await db.execute(
-                "UPDATE tournaments SET name=:name, channel=:channel, message=:message, running=:running WHERE id = :id",
+                "UPDATE tournaments SET name=:name, channel=:channel, guild=:guild, message=:message, running=:running WHERE id = :id",
                 {
                     "id": tournament.id,
                     "name": tournament.name,
                     "channel": tournament.channel,
+                    "guild": tournament.guild,
                     "message": tournament.message,
                     "running": tournament.running,
                 },
