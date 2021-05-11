@@ -13,6 +13,79 @@ from src.cogs.database import DatabaseCog, Match, Team, Tournament, User, UserMa
 from src.converters import BestOfXConverter, CodeConverter
 
 
+# Exceptions
+class TournamentAlreadyRunning(Exception):
+    tournament: Tournament
+
+    def __init__(self, tournament: Tournament):
+        self.tournament = tournament
+        super().__init__()
+
+
+class TournamentAlreadyExists(Exception):
+    tournament: Tournament
+
+    def __init__(self, tournament: Tournament):
+        self.tournament = tournament
+        super().__init__()
+
+
+class TournamentNotRunning(Exception):
+    def __init__(self):
+        super().__init__()
+
+
+class NoTournament(Exception):
+    reason: str
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__()
+
+
+class CantEndTournament(Exception):
+    tournament: Tournament
+    reason: str
+
+    def __init__(self, tournament: Tournament, reason: str):
+        self.tournament = tournament
+        self.reason = reason
+        super().__init__()
+
+
+class MatchAlreadyExists(Exception):
+    match: Match
+
+    def __init__(self, match: Match):
+        self.match = match
+        super().__init__()
+
+
+class CantEndMatch(Exception):
+    match: Match
+    reason: str
+
+    def __init__(self, match: Match, reason: str):
+        self.match = match
+        self.reason = reason
+        super().__init__()
+
+
+class CantCloseMatch(Exception):
+    match: Match
+    reason: str
+
+    def __init__(self, match: Match, reason: str):
+        self.match = match
+        self.reason = reason
+        super().__init__()
+
+
+class MatchDoesntExist(Exception):
+    def __init__(self):
+        super().__init__()
+
+
 class TournamentCog(commands.Cog, name="Tournament"):
     score_table: dict[str, int] = {
         "bo1_team": 1,
@@ -265,39 +338,30 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="start",
         brief="Starts a tournament.",
         description="Creates a new tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
+        aliases=["s"],
         usage="<tournament name>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def tournament_start(self, ctx, *, name: str):
+    async def tournament_start(self, ctx: commands.Context, *, name: str):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         tournament = await db_cog.get_running_tournament(ctx.channel.id)
 
         # Check if tournament already running
         if tournament is not None:
-            msg = await ctx.send(
-                f"Tournament **{tournament.name}** already running.",
-            )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentAlreadyRunning(tournament)
 
         # Check if other tournament of same name already exists
-        tournament = await db_cog.get_tournament_by_name(name, ctx.channel.id)
+        tournament = await db_cog.get_tournament_by_name(name, ctx.guild.id)
         if tournament is not None:
-            msg = await ctx.send(
-                f"Tournament **{tournament.name}** already exists.",
-            )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentAlreadyExists(tournament)
 
         message = await ctx.send("Tournament is starting...")
 
         try:
             tournament = Tournament(
-                uuid.uuid4(), name.strip(), ctx.channel.id, message.id, 1
+                uuid.uuid4(), name.strip(), ctx.channel.id, ctx.guild.id, message.id, 1
             )
             await db_cog.insert_tournament(tournament)
         except Exception as e:
@@ -310,6 +374,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="end",
         brief="Ends a tournament.",
         description="Ends the running tournament.",
+        aliases=["e"],
         usage="",
     )
     @commands.guild_only()
@@ -320,20 +385,17 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Check if tournament running
         tournament = await db_cog.get_running_tournament(ctx.channel.id)
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentNotRunning
 
         # Check if there are still matches not ended
         running_matches = await db_cog.get_matches_by_state(tournament.id, 1)
         closed_matches = await db_cog.get_matches_by_state(tournament.id, 2)
 
-        if (len(running_matches) + len(closed_matches)) > 0:
-            msg = await ctx.send("There are still matches that haven't been ended.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+        if len(running_matches) > 0:
+            raise CantEndTournament(tournament, "There are still open matches")
+
+        if len(closed_matches) > 0:
+            raise CantEndTournament(tournament, "There are still closed matches")
 
         tournament.running = 0
         await db_cog.update_tournament(tournament)
@@ -343,9 +405,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.message.delete()
 
     @tournament_group.command(
-        name="show",
+        name="info",
         brief="Shows info on a tournament.",
         description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.\n\nArguments:\n-Tournament name can contain spaces.",
+        aliases=["i"],
         usage="<tournament name>",
     )
     @commands.guild_only()
@@ -354,18 +417,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         if name is not None:
-            tournament = await db_cog.get_tournament_by_name(name, ctx.channel.id)
-            txt = "No tournament with this name exists in this channel."
+            tournament = await db_cog.get_tournament_by_name(name, ctx.guild.id)
+            txt = "No tournament with this name exists in this guild."
         else:
             tournament = await db_cog.get_running_tournament(ctx.channel.id)
-            txt = "No tournament is running."
+            txt = "No tournament is running in this channel."
 
         # Check if tournament exists
         if tournament is None:
-            msg = await ctx.send(txt)
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise NoTournament(txt)
 
         content = await self.generate_tournament_message(tournament)
         await ctx.send(content + "\n`This message does not get updated.`")
@@ -375,15 +435,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="list",
         brief="Lists tournaments in a channel.",
         description="Lists all current and past tournaments in this channel.",
+        aliases=["l", "ls"],
         usage="",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def tournament_list(self, ctx):
+    async def tournament_list(self, ctx: commands.Context):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
-        tournaments: list[Tournament] = await db_cog.get_tournaments_by_channel(
-            ctx.channel.id
+        tournaments: list[Tournament] = await db_cog.get_tournaments_by_guild(
+            ctx.guild.id
         )
 
         paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
@@ -391,12 +452,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournaments:
             paginator.add_line("**Tournaments:**")
             for tournament in tournaments:
-                if tournament.running == 1:
-                    paginator.add_line(tournament.name)
+                channel: discord.Channel = self.bot.get_channel(tournament.channel)
+                line = f"{tournament.name} - Channel: {channel.mention}"
                 if tournament.running == 0:
-                    paginator.add_line(tournament.name + " - Ended")
+                    line += " - Ended"
+                paginator.add_line(line)
         else:
-            paginator.add_line("There are no tournaments in this channel.")
+            paginator.add_line("There are no tournaments in this server.")
 
         for page in paginator.pages:
             await ctx.send(page)
@@ -405,6 +467,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="start",
         brief="Starts a match.",
         description="Creates a new match between two teams.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-X must be 1, 3 or 5.",
+        aliases=["s"],
         usage="<match name> <short code team 1> <short code team 2> bo<X>",
     )
     @commands.guild_only()
@@ -423,20 +486,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Check if tournament running
         tournament = await db_cog.get_running_tournament(ctx.channel.id)
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentNotRunning()
 
         # Check if game with this name already exists
         existing_match = await db_cog.get_match(name, tournament.id)
         if existing_match is not None:
-            msg = await ctx.send(
-                f"A match in this tournament with the name {name} already exists.",
-            )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise MatchAlreadyExists(existing_match)
 
         team1: Optional[Team] = await db_cog.get_team(team1_code, ctx.guild.id)
         team2: Optional[Team] = await db_cog.get_team(team2_code, ctx.guild.id)
@@ -482,6 +537,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="close",
         brief="Closes predictions for a match.",
         description="Closes new predictions on the specified match.\n\nArguments:\n-Match name can contain spaces.",
+        aliases=["c"],
         usage="<name>",
     )
     @commands.guild_only()
@@ -493,16 +549,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Check if tournament running
         tournament = await db_cog.get_running_tournament(ctx.channel.id)
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentNotRunning()
 
         # Is name a running match
         match = await db_cog.get_match(name, tournament.id)
-        if (match is None) or (match.running != 1):
-            await ctx.send("Message is not a running match.")
-            return
+        if match is None:
+            raise MatchDoesntExist()
+        if match.running != 1:
+            raise CantCloseMatch(match, "This is not an open match")
 
         await self.save_votes(match, tournament)
 
@@ -516,6 +570,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="end",
         brief="Ends a match.",
         description="Ends the match.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-Played games depends on what type of match it is (BO1, 3 or 5).",
+        aliases=["e"],
         usage="<name> <winning team code> <played games>",
     )
     @commands.guild_only()
@@ -534,20 +589,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Check if tournament running
         tournament = await db_cog.get_running_tournament(ctx.channel.id)
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentNotRunning()
 
         # Is reference a running or closed match
         match = await db_cog.get_match(name, tournament.id)
-        if (match is None) or (match.running not in (1, 2)):
-            msg = await ctx.send(
-                "Provided name does not exist or is not a running or closed match"
-            )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+        if match is None:
+            raise MatchDoesntExist()
+        if match.running not in (1, 2):
+            raise CantEndMatch(match, "This match has already ended.")
 
         # Is team code one of the participants
         if code == match.team1:
@@ -555,21 +604,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
         elif code == match.team2:
             match.result = 2
         else:
-            msg = await ctx.send(f"Team {code} is not a participant.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise CantEndMatch(match, f"Team {code} is not a participant.")
 
         # Is valid score
         lower_bound = math.ceil(match.bestof / 2)
         upper_bound = match.bestof
         if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
-            msg = await ctx.send(
+            raise CantEndMatch(
+                match,
                 f"{num_games} is not a valid number of games for a BO{match.bestof}.",
             )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
 
         if match.running == 1:
             await self.save_votes(match, tournament)
@@ -603,17 +647,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
             ctx.channel.id
         )
         if tournament is None:
-            msg = await ctx.send("No tournament is running.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise TournamentNotRunning()
 
         match: Optional[Match] = await db_cog.get_match(name, tournament.id)
         if match is None:
-            msg = await ctx.send("Match does not exist.")
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
+            raise MatchDoesntExist()
 
         message: discord.Message = await ctx.channel.fetch_message(match.message)
 
@@ -640,6 +678,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="list",
         brief="Lists all matches in a tournament.",
         description="Lists all current and past matches in the provided tournament. If no tournament is provided, lists matches in the currently running tournament.",
+        aliases=["l", "ls"],
         usage="[tournament name]",
     )
     @commands.guild_only()
@@ -651,23 +690,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if name is None:
             tournament = await db_cog.get_running_tournament(ctx.channel.id)
             if tournament is None:
-                await ctx.send(
-                    "There is no currently running tournament in this channel."
-                )
+                raise TournamentNotRunning()
         else:
             tournament: Tournament = await db_cog.get_tournament_by_name(
-                name, ctx.channel.id
+                name, ctx.guild.id
             )
             if tournament is None:
-                await ctx.send("No tournament by that name exists in this channel.")
-
-        channel = self.bot.get_channel(tournament.channel)
-        if channel is None:
-            return ""
-        guild = channel.guild
+                raise NoTournament("No tournament by that name exists in this server.")
 
         teams: dict[str, Team] = dict()
-        for team in await db_cog.get_teams_by_guild(guild.id):
+        for team in await db_cog.get_teams_by_guild(tournament.guild):
             teams[team.code] = team
 
         past_matches: Match = await db_cog.get_matches_by_state(tournament.id, 0)
@@ -696,7 +728,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in closed_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof} - Closed"
+                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
         if active_matches:
             paginator.add_line("")
@@ -767,8 +799,28 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def cog_command_error(self, ctx, error):
         message = ""
 
+        if isinstance(error, commands.CommandInvokeError):
+            if isinstance(error.original, TournamentAlreadyExists):
+                message = f"A tournament with the name {error.original.tournament.name} already exists."
+            if isinstance(error.original, TournamentAlreadyRunning):
+                message = f"There is already a running tournament in this channel. You can only have one running tournament per channel."
+            if isinstance(error.original, TournamentNotRunning):
+                message = "No tournament is running."
+            if isinstance(error.original, CantEndTournament):
+                message = f"Could not end tournament {error.original.tournament.name} already exists ({error.original.reason})."
+            if isinstance(error.original, NoTournament):
+                message = f"Could not find tournament ({error.original.reason})."
+            if isinstance(error.original, MatchAlreadyExists):
+                message = f'A match with the name "{error.original.match.name}" already exists.'
+            if isinstance(error.original, MatchDoesntExist):
+                message = f"No match was found (Maybe you made a typo in the name)."
+            if isinstance(error.original, CantEndMatch):
+                message = f'Could not end match "{error.original.match.name}" ({error.original.reason}).'
+            if isinstance(error.original, CantCloseMatch):
+                message = f'Could not close match "{error.original.match.name}" ({error.original.reason}).'
+
         if len(message) > 0:
-            await ctx.send(message)
+            await ctx.send(f"`{message}`")
             ctx.handled = True
             return
 
