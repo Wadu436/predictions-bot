@@ -1,14 +1,14 @@
-import asyncio
 import json
 import logging
 import sqlite3
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import discord
 from discord.ext import commands
 
-from src import exceptions
+from src.converters import EmojiNotFound, EmojiNotInGuild, TeamDoesntExist, TeamExist
 
 PREFIX = "+"
 
@@ -197,51 +197,39 @@ async def show_loaded(ctx, *extensions):
 
 @bot.event
 async def on_command_error(ctx, error):
-    # Prevents commands with local handlers from being handled here
-    if hasattr(ctx.command, "on_error"):
+    # Prevents already handled commands from being handled here
+    if getattr(ctx, "handled", False):
         return
 
-    # Prevents commands with cog handlers from being handled here
-    cog = ctx.cog
-    if cog:
-        if cog._get_overridden_method(cog.cog_command_error) is not None:
-            return
+    # Handle converter errors
+    message = ""
+    if isinstance(error, EmojiNotInGuild):
+        message = "You can only use unicode/global emoji or emoji from this server."
+    if isinstance(error, EmojiNotFound):
+        message = "That is not an emoji."
 
-    if isinstance(error, exceptions.EmojiNotInGuild) or isinstance(
-        error,
-        exceptions.EmojiNotFound,
-    ):
-        await ctx.send(
-            "You can only use custom emojis from this server.",
-        )
-        return
-
-    if isinstance(error, exceptions.TeamExist):
+    if isinstance(error, TeamExist):
         if len(error.args) > 0:
-            await ctx.send(
-                f"Team with code {error.args[0]} already exists.",
-            )
+            message = f"Team with code {error.args[0]} already exists."
         else:
-            await ctx.send("Team already exists.")
-        return
+            message = "Team already exists."
 
-    if isinstance(error, exceptions.TeamDoesntExist):
+    if isinstance(error, TeamDoesntExist):
         if len(error.args) > 0:
-            await ctx.send(
-                f"Team with code {error.args[0]} doesn't exist.",
-            )
+            message = f"Team with code {error.args[0]} doesn't exist."
         else:
-            await ctx.send("Team doesn't exist.")
+            message = "Team doesn't exist."
+
+    if len(message) > 0:
+        await ctx.send(f"`{message}`")
         return
 
+    # Handle discord py errors
     if isinstance(error, commands.UserInputError):
-        await ctx.send_help(ctx.invoked_with)
+        await ctx.send_help(ctx.command)
         return
 
     if isinstance(error, commands.CommandNotFound):
-        msg = await ctx.send(f"`Command {ctx.invoked_with} not found`")
-        await asyncio.sleep(10)
-        await msg.delete()
         return
 
     if isinstance(error, commands.CommandInvokeError):
@@ -256,8 +244,6 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send("`An error occured while processing the command.`")
 
-    # logging.error(error)
-    # logging.error("".join(traceback.format_tb(error.__traceback__)))
     logging.error(
         "".join(traceback.format_exception(type(error), error, error.__traceback__)),
     )
@@ -268,7 +254,7 @@ def launch():
     logging.debug("Loading config")
     configPath = Path("./persistent/config.json")
     if not configPath.exists():
-        config = {"token": None}
+        config: dict[str, Optional[str]] = {"token": None}
         with open(configPath, "w") as f:
             json.dump(config, f)
     else:

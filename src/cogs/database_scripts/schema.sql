@@ -14,10 +14,11 @@ CREATE TABLE tournaments (
     id GUID NOT NULL,
     name TEXT NOT NULL,
     channel INTEGER NOT NULL,
+    guild INTEGER NOT NULL,
     message INTEGER NOT NULL,
     running INTEGER NOT NULL,
     PRIMARY KEY(id),
-    UNIQUE(name, channel)
+    UNIQUE(name, guild)
 );
 CREATE TABLE matches (
     name TEXT NOT NULL,
@@ -45,4 +46,4 @@ CREATE TABLE users_matches (
     FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (match_name, match_tournament) REFERENCES matches (name, tournament) ON UPDATE CASCADE ON DELETE CASCADE
 );
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
