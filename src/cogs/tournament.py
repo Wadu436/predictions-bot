@@ -892,7 +892,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if isinstance(error.original, TournamentNotRunning):
                 message = "No tournament is running."
             if isinstance(error.original, CantEndTournament):
-                message = f"Could not end tournament {error.original.tournament.name} already exists ({error.original.reason})."
+                message = f"Could not end tournament {error.original.tournament.name} ({error.original.reason})."
             if isinstance(error.original, NoTournament):
                 message = f"Could not find tournament ({error.original.reason})."
             if isinstance(error.original, MatchAlreadyExists):
