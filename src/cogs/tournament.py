@@ -476,7 +476,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for i in range(math.floor(bestof / 2), bestof):
                 await message.add_reaction(games_emojis[i])
 
-        await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
     @match_group.command(
@@ -511,7 +510,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await db_cog.update_match(match)
 
         await self.update_match_message(match)
-        await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
     @match_group.command(
