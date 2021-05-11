@@ -437,7 +437,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         content = await self.generate_tournament_message(tournament)
         await ctx.send(content + "\n`This message does not get updated.`")
-        await ctx.message.delete()
 
     @tournament_group.command(
         name="list",
@@ -605,14 +604,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if match.running not in (1, 2):
             raise CantEndMatch(match, "This match has already ended.")
 
-        # Is team code one of the participants
-        if code == match.team1:
-            match.result = 1
-        elif code == match.team2:
-            match.result = 2
-        else:
-            raise CantEndMatch(match, f"Team {code} is not a participant.")
-
         # Is valid score
         lower_bound = math.ceil(match.bestof / 2)
         upper_bound = match.bestof
@@ -621,6 +612,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 match,
                 f"{num_games} is not a valid number of games for a BO{match.bestof}.",
             )
+
+        # Is team code one of the participants
+        if code == match.team1:
+            match.result = 1
+        elif code == match.team2:
+            match.result = 2
+        else:
+            raise CantEndMatch(match, f"Team {code} is not a participant.")
 
         if match.running == 1:
             await self.save_votes(match, tournament)
@@ -634,10 +633,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
             match.result = 2
 
         await db_cog.update_match(match)
+        match = db_cog.get_match(
+            match.name, match.tournament
+        )  # Refresh match (winning and losing games)
 
         await self.update_match_message(match)
-        await ctx.message.delete()
         await self.update_tournament_message(tournament)
+        await ctx.message.delete()
 
     @match_group.command(
         name="fix",
@@ -679,7 +681,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for i in range(math.floor(match.bestof / 2), match.bestof):
                 await message.add_reaction(games_emojis[i])
 
-        await ctx.message.delete()
+        await self.update_match_message(match)
 
     @match_group.command(
         name="list",
@@ -708,9 +710,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
         for team in await db_cog.get_teams_by_guild(tournament.guild):
             teams[team.code] = team
 
-        past_matches: Match = await db_cog.get_matches_by_state(tournament.id, 0)
-        closed_matches: Match = await db_cog.get_matches_by_state(tournament.id, 2)
-        active_matches: Match = await db_cog.get_matches_by_state(tournament.id, 1)
+        past_matches: list[Match] = await db_cog.get_matches_by_state(tournament.id, 0)
+        closed_matches: list[Match] = await db_cog.get_matches_by_state(
+            tournament.id, 2
+        )
+        active_matches: list[Match] = await db_cog.get_matches_by_state(
+            tournament.id, 1
+        )
 
         paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
         paginator.add_line(f"***{tournament.name} Matches***")
