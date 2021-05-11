@@ -241,7 +241,8 @@ async def on_command_error(ctx, error):
         if isinstance(error, sqlite3.IntegrityError):
             await ctx.send("`Database integrity error.`")
             logging.error("Database integrity error.")
-    await ctx.send("`An error occured while processing the command.`")
+    else:
+        await ctx.send("`An error occured while processing the command.`")
 
     logging.error(
         "".join(traceback.format_exception(type(error), error, error.__traceback__)),
