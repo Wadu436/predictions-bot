@@ -1,10 +1,7 @@
-import asyncio
-import logging
 import math
 import uuid
 from typing import Optional
 
-import aiosqlite
 import discord
 from discord.ext import commands
 
