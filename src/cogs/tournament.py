@@ -407,12 +407,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="info",
         brief="Shows info on a tournament.",
-        description="Shows info on a tournament in this channel. If no name is given, it shows info on the currently running tournament.\n\nArguments:\n-Tournament name can contain spaces.",
+        description="Shows info on a tournament in this server. If no name is given, it shows info on the currently running tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
         aliases=["i"],
         usage="<tournament name>",
     )
     @commands.guild_only()
-    @commands.has_permissions(manage_messages=True)
     async def tournament_show(self, ctx, *, name: Optional[str]):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -434,12 +433,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="list",
         brief="Lists tournaments in a channel.",
-        description="Lists all current and past tournaments in this channel.",
+        description="Lists all current and past tournaments in this server.",
         aliases=["l", "ls"],
         usage="",
     )
     @commands.guild_only()
-    @commands.has_permissions(manage_messages=True)
     async def tournament_list(self, ctx: commands.Context):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -682,7 +680,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         usage="[tournament name]",
     )
     @commands.guild_only()
-    @commands.has_permissions(manage_messages=True)
     async def matches_list(self, ctx, *, name: Optional[str]):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 

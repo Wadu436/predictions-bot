@@ -29,6 +29,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         description="Commands for creating, updating, listing or deleting teams.",
         aliases=["tm"],
     )
+    @commands.guild_only()
     async def team_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
@@ -39,6 +40,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         description="Commands for editing the name, code or emoji of a team.",
         aliases=["e"],
     )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
     async def edit_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
@@ -50,6 +53,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         usage="<code> <new name>",
         aliases=["n"],
     )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
     async def edit_name(
         self,
         ctx: commands.Context,
@@ -88,6 +93,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         usage="<old code> <new code>",
         aliases=["c"],
     )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
     async def edit_code(
         self,
         ctx: commands.Context,
@@ -117,6 +124,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         usage="<code> <new emoji>",
         aliases=["e"],
     )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
     async def edit_emoji(
         self,
         ctx: commands.Context,
