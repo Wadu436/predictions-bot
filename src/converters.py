@@ -1,7 +1,7 @@
 import re
 
-import emojis
 from discord.ext import commands
+from emojis import emojis
 
 from src import exceptions
 from src.cogs.database import DatabaseCog

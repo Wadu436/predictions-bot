@@ -4,6 +4,7 @@ import logging
 import sqlite3
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import discord
 from discord.ext import commands
@@ -235,7 +236,7 @@ async def on_command_error(ctx, error):
         return
 
     if isinstance(error, commands.UserInputError):
-        await ctx.send_help(ctx.invoked_with)
+        await ctx.send_help(ctx.command)
         return
 
     if isinstance(error, commands.CommandNotFound):
@@ -268,7 +269,7 @@ def launch():
     logging.debug("Loading config")
     configPath = Path("./persistent/config.json")
     if not configPath.exists():
-        config = {"token": None}
+        config: dict[str, Optional[str]] = {"token": None}
         with open(configPath, "w") as f:
             json.dump(config, f)
     else:
