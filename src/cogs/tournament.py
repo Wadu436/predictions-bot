@@ -323,11 +323,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
     # ----------------------------- GROUPS -----------------------------
 
     @commands.group(name="tournament", aliases=["tr"])
+    @commands.guild_only()
     async def tournament_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
     @commands.group(name="match", aliases=["m"])
+    @commands.guild_only()
     async def match_group(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
