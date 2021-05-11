@@ -14,6 +14,8 @@ db_cog = None
 aiosqlite.register_adapter(uuid.UUID, lambda u: u.bytes_le)
 aiosqlite.register_converter("GUID", lambda b: uuid.UUID(bytes_le=b))
 
+SCHEMA_VERSION = 2
+
 
 @dataclass
 class Team:
@@ -93,7 +95,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             ) as db:
                 async with db.execute("PRAGMA user_version;") as cur:
                     version = (await cur.fetchone())[0]
-                    if version < 1:
+                    if version < SCHEMA_VERSION:
                         # Update schemas
                         backup_path = Path("./persistent/bot_backup.db")
                         async with aiosqlite.connect(
@@ -103,7 +105,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                             await db.backup(db_backup)
 
                         logging.info("Updating schema (Backup made to bot_backup.db).")
-                        for i in range(version, 1):
+                        for i in range(version, SCHEMA_VERSION):
                             migration_path = Path(
                                 f"./src/cogs/database_scripts/migration_{i}_{i+1}.sql",
                             )
