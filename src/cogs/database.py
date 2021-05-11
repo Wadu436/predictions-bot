@@ -194,11 +194,12 @@ class DatabaseCog(commands.Cog, name="Database"):
         async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
             await db.execute("PRAGMA foreign_keys = ON;")
             await db.execute(
-                "INSERT INTO tournaments VALUES (:id, :name, :channel, :message, :running);",
+                "INSERT INTO tournaments VALUES (:id, :name, :channel, :guild, :message, :running);",
                 {
                     "id": tournament.id,
                     "name": tournament.name,
                     "channel": tournament.channel,
+                    "guild": tournament.guild,
                     "message": tournament.message,
                     "running": tournament.running,
                 },
@@ -240,6 +241,21 @@ class DatabaseCog(commands.Cog, name="Database"):
                 "SELECT * FROM tournaments WHERE channel=:channel;",
                 {
                     "channel": channel,
+                },
+            ) as cur:
+                tournaments: list[Tournament] = []
+                async for tr in cur:
+                    tournaments.append(
+                        Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
+                    )
+        return tournaments
+
+    async def get_tournaments_by_guild(self, guild: int) -> list[Tournament]:
+        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+            async with db.execute(
+                "SELECT * FROM tournaments WHERE guild=:guild;",
+                {
+                    "guild": guild,
                 },
             ) as cur:
                 tournaments: list[Tournament] = []
