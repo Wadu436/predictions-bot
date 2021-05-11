@@ -666,11 +666,9 @@ class TournamentCog(commands.Cog, name="Tournament"):
             # Fix emoji
             message: discord.Message = await ctx.channel.fetch_message(match.message)
 
-            
             for reaction in message.reactions:
                 if reaction.me:
                     await reaction.remove(self.bot.user)
-
 
             team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
             team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
