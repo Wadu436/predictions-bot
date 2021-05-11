@@ -4,6 +4,7 @@ import regex
 from discord.ext import commands
 
 
+# TODO: Improve when discordpy v2.0 releases with the run_conversion function
 def regex_arguments(pattern):
     def decorator(function):
         async def wrapper(self, ctx, *, args: str):
@@ -19,7 +20,7 @@ def regex_arguments(pattern):
                 elif isinstance(parameter.annotation, commands.Converter):
                     # Converter object
                     arg_converted.append(
-                        await parameter.annotation.convert(ctx, argument)
+                        await parameter.annotation.convert(ctx, argument),
                     )
                 elif inspect.isclass(parameter.annotation) and issubclass(
                     parameter.annotation,

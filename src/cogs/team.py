@@ -9,6 +9,16 @@ from src.cogs.tournament import TournamentCog
 from src.converters import CodeConverter, EmojiConverter
 
 
+class EditException(Exception):
+    team: Team
+    reason: str
+
+    def __init__(self, team: Team, reason: str):
+        self.team = team
+        self.reason = reason
+        super().__init__(team, reason)
+
+
 class TeamsCog(commands.Cog, name="Teams"):
     def __init__(self, bot):
         self.bot = bot
@@ -52,6 +62,7 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         team: Team = await db_cog.get_team(code, ctx.guild.id)
 
+        original_name = team.name
         team.name = name
 
         await db_cog.update_team(code, team)
@@ -61,6 +72,8 @@ class TeamsCog(commands.Cog, name="Teams"):
             to_update: list[Match] = await db_cog.get_matches_by_team(team)
             for match in to_update:
                 await tr_cog.update_match_message(match)
+
+        await ctx.send(f'Changed name:\n "{original_name}" => "{name}"')
 
     @edit_group.group(
         name="code",
@@ -83,6 +96,8 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         await db_cog.update_team(old_code, team)
 
+        await ctx.send(f'Changed code:\n "{old_code}" => "{new_code}"')
+
     @edit_group.group(
         name="emoji",
         brief="Edits a team's emoji.",
@@ -103,11 +118,22 @@ class TeamsCog(commands.Cog, name="Teams"):
         matches: list[Match] = await db_cog.get_matches_by_team(team)
 
         if len(matches) > 0:
-            return
+            raise EditException(
+                team,
+                "Cannot edit emoji for a team that is already in matches.",
+            )
 
+        if emoji == team.emoji:
+            raise EditException(
+                team,
+                "New emoji is the same as the current emoji.",
+            )
+
+        old_emoji = team.emoji
         team.emoji = emoji
 
         await db_cog.update_team(code, team)
+        await ctx.send(f"Changed emoji:\n {old_emoji} => {emoji}")
 
     @team_group.command(
         name="new",
@@ -173,6 +199,20 @@ class TeamsCog(commands.Cog, name="Teams"):
                 value=f"Code: `{team.code}`",
             )
         await ctx.send(embed=embed)
+
+    async def cog_command_error(self, ctx, error):
+        message = ""
+
+        if isinstance(error, commands.CommandInvokeError):
+            if isinstance(error.original, EditException):
+                message = f"Could not edit team {error.original.team.code}"
+                if error.original.reason is not None:
+                    message += f" ({error.original.reason})"
+
+        if len(message) > 0:
+            await ctx.send(f"`{message}`")
+            ctx.handled = True
+            return
 
 
 def setup(bot):

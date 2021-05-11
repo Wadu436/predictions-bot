@@ -3,8 +3,27 @@ import re
 from discord.ext import commands
 from emojis import emojis
 
-from src import exceptions
 from src.cogs.database import DatabaseCog
+
+
+class EmojiNotFound(commands.BadArgument):
+    def __init__(self):
+        super().__init__()
+
+
+class EmojiNotInGuild(commands.BadArgument):
+    def __init__(self):
+        super().__init__()
+
+
+class TeamExist(commands.BadArgument):
+    def __init__(self, code):
+        super().__init__(code)
+
+
+class TeamDoesntExist(commands.BadArgument):
+    def __init__(self, code):
+        super().__init__(code)
 
 
 class EmojiConverter(commands.Converter):
@@ -16,15 +35,15 @@ class EmojiConverter(commands.Converter):
             emoji = ctx.bot.get_emoji(emoji_id)
             # not found emoji
             if emoji is None:
-                raise exceptions.EmojiNotFound()
+                raise EmojiNotInGuild()
             # found emoji
             if emoji.guild != ctx.guild:
-                raise exceptions.EmojiNotInGuild()
+                raise EmojiNotInGuild()
             return str(emoji)
 
         # Check if Unicode emoji
         if not emojis.db.get_emoji_by_code(argument):
-            raise exceptions.EmojiNotFound()
+            raise EmojiNotFound()
 
         return argument
 
@@ -43,9 +62,9 @@ class CodeConverter(commands.Converter):
         code_exists = (await db_cog.get_team(code, ctx.guild.id)) is not None
         if code_exists != self.exist:
             if self.exist:
-                raise exceptions.TeamDoesntExist(code)
+                raise TeamDoesntExist(code)
             else:
-                raise exceptions.TeamExist(code)
+                raise TeamExist(code)
         return code
 
 

@@ -719,7 +719,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        """Removes other reactions in the same category as the new reaction from a match post. Basically turns the reactions into a (shitty) radio button."""  # Check if message is a match
+        """Removes other reactions in the same category as the new reaction from a match post. Basically turns the reactions into a (shitty) radio button."""
+        # Check if message is a match
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         # We don't care about our own reactions
@@ -764,6 +765,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
             react_user = await reaction.users().get(id=payload.user_id)
             if react_user is not None:
                 await message.remove_reaction(reaction, discord.Object(payload.user_id))
+
+    async def cog_command_error(self, ctx, error):
+        message = ""
+
+        if len(message) > 0:
+            await ctx.send(message)
+            ctx.handled = True
+            return
 
 
 def setup(bot):
