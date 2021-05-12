@@ -760,15 +760,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         for page in paginator.pages:
             await ctx.send(page)
 
-    @match_group.command(
-        name="list",
-        brief="Lists all matches in a tournament.",
-        description="Lists all current and past matches in the provided tournament. If no tournament is provided, lists matches in the currently running tournament.",
-        aliases=["l", "ls"],
-        usage="[tournament name]",
-    )
-    @commands.guild_only()
-    async def matches_list(self, ctx, *, name: Optional[str]):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         tournament: Tournament
