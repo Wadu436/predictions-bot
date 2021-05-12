@@ -8,8 +8,8 @@ Python 3.9+ \
 [aiosqlite](https://pypi.org/project/aiosqlite/) 
 
 ## Usage
-Install the requirements: `pip install -r requirements.txt`
-Run `python main.py` 
-Enter your token
+Install the requirements: `pip install -r requirements.txt` \
+Run `python main.py`  \
+Enter your token 
 
 If you wish to change your token at a later time, you can do so in `./persistent/config.json`
