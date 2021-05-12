@@ -7,9 +7,8 @@ Python 3.9+ \
 [emojis](https://pypi.org/project/emojis/) \
 [aiosqlite](https://pypi.org/project/aiosqlite/)
 
-Install modules: `pip install -r requirements.txt`
-
 ## Usage
+Install the requirements: `pip install -r requirements.txt`
 Run `python main.py` 
 Enter your token
 

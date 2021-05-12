@@ -1,6 +1,6 @@
 import inspect
+import re
 
-import regex
 from discord.ext import commands
 
 
@@ -8,7 +8,7 @@ from discord.ext import commands
 def regex_arguments(pattern):
     def decorator(function):
         async def wrapper(self, ctx, *, args: str):
-            match = regex.match(pattern, args.strip())
+            match = re.match(pattern, args.strip())
             if match is None:
                 raise commands.UserInputError()
             arg_groups = [self, ctx] + list(match.groups())
