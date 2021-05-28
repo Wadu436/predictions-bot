@@ -6,15 +6,10 @@ from pathlib import Path
 from sqlite3 import PARSE_DECLTYPES
 from typing import Any, Optional
 
-import aiosqlite
+import asyncpg
 from discord.ext import commands, tasks
 
-db_cog = None
-
-aiosqlite.register_adapter(uuid.UUID, lambda u: u.bytes_le)
-aiosqlite.register_converter("GUID", lambda b: uuid.UUID(bytes_le=b))
-
-SCHEMA_VERSION = 2
+import config
 
 
 @dataclass
@@ -75,146 +70,73 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     def __init__(self, bot):
         self.bot = bot
-        self.db_path = Path("./persistent/bot.db")
-        self.check_database_schema.start()
-
-    @tasks.loop(count=1)
-    async def check_database_schema(self):
-        if not self.db_path.exists():
-            logging.info("Creating Schemas")
-            async with aiosqlite.connect(
-                self.db_path,
-                detect_types=PARSE_DECLTYPES,
-            ) as db:
-                with open("./src/cogs/database_scripts/leaderboard.sql", "r") as script:
-                    await db.executescript(script.read())
-                    await db.commit()
-        else:
-            async with aiosqlite.connect(
-                self.db_path,
-                detect_types=PARSE_DECLTYPES,
-            ) as db:
-                async with db.execute("PRAGMA user_version;") as cur:
-                    version = (await cur.fetchone())[0]
-                    if version < SCHEMA_VERSION:
-                        # Update schemas
-                        backup_path = Path("./persistent/bot_backup.db")
-                        async with aiosqlite.connect(
-                            backup_path,
-                            detect_types=PARSE_DECLTYPES,
-                        ) as db_backup:
-                            await db.backup(db_backup)
-
-                        logging.info("Updating schema (Backup made to bot_backup.db).")
-                        for i in range(version, SCHEMA_VERSION):
-                            migration_path = Path(
-                                f"./src/cogs/database_scripts/migration_{i}_{i+1}.sql",
-                            )
-                            if not migration_path.exists():
-                                logging.error("Migration file does not exist.")
-                                break
-
-                            with open(
-                                migration_path,
-                                "r",
-                            ) as script:
-                                await db.executescript(script.read())
-                        await db.commit()
 
     # Team-related queries
     async def insert_team(self, team: Team) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            await db.execute(
-                "INSERT INTO teams VALUES (:name, :code, :emoji, :guild);",
-                {
-                    "name": team.name,
-                    "code": team.code,
-                    "emoji": team.emoji,
-                    "guild": team.guild,
-                },
-            )
-            await db.commit()
+        db = await asyncpg.connect(config.postgres)
+        await db.execute(
+            "INSERT INTO teams VALUES ($1, $2, $3, $4);",
+            team.name,
+            team.code,
+            team.emoji,
+            team.guild,
+        )
+        await db.close()
 
     async def get_team(self, code: str, guild: int) -> Optional[Team]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT * FROM teams WHERE code=:code AND guild=:guild",
-                {
-                    "code": code,
-                    "guild": guild,
-                },
-            ) as cur:
-                tr = await cur.fetchone()
+        db = await asyncpg.connect(config.postgres)
+        tr = await db.fetchrow(
+            "SELECT * FROM teams WHERE code=$1 AND guild=$2", code, guild
+        )
+        await db.close()
         if tr is not None:
             return Team(tr[0], tr[1], tr[2], tr[3])
 
     async def get_teams_by_guild(self, guild: int) -> list[Team]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT * FROM teams WHERE guild=:guild",
-                {
-                    "guild": guild,
-                },
-            ) as cur:
-                teams: list[Team] = []
-                async for tr in cur:
-                    teams.append(Team(tr[0], tr[1], tr[2], tr[3]))
+        db = await asyncpg.connect(config.postgres)
+        records = await db.fetch("SELECT * FROM teams WHERE guild=$1", guild)
+        teams: list[Team] = []
+        for tr in records:
+            teams.append(Team(tr[0], tr[1], tr[2], tr[3]))
+        await db.close()
         return teams
 
     async def update_team(self, original_code, team: Team) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            await db.execute("PRAGMA foreign_keys = ON;")
-            await db.execute(
-                "UPDATE teams SET name=:name, code=:code, emoji=:emoji WHERE code=:original_code AND guild=:guild;",
-                {
-                    "name": team.name,
-                    "code": team.code,
-                    "emoji": team.emoji,
-                    "original_code": original_code,
-                    "guild": team.guild,
-                },
-            )
-            await db.commit()
+        db = await asyncpg.connect(config.postgres)
+        await db.execute(
+            "UPDATE teams SET name=$1, code=$2, emoji=$3 WHERE code=$4 AND guild=$5;",
+            team.name,
+            team.code,
+            team.emoji,
+            original_code,
+            team.guild,
+        )
+        await db.close()
 
     async def delete_team(self, team: Team) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute(
-                "DELETE FROM teams WHERE code = :code AND guild = :guild;",
-                {
-                    "code": team.code,
-                    "guild": team.guild,
-                },
-            )
-            await db.commit()
+        db = await asyncpg.connect(config.postgres)
+        await db.execute(
+            "DELETE FROM teams WHERE code=$1 AND guild=$2;", team.code, team.guild
+        )
+        await db.close()
 
     # Tournament-related queries
     async def insert_tournament(self, tournament: Tournament) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            await db.execute(
-                "INSERT INTO tournaments VALUES (:id, :name, :channel, :guild, :message, :running);",
-                {
-                    "id": tournament.id,
-                    "name": tournament.name,
-                    "channel": tournament.channel,
-                    "guild": tournament.guild,
-                    "message": tournament.message,
-                    "running": tournament.running,
-                },
-            )
-            await db.commit()
+        db = await asyncpg.connect(config.postgres)
+        await db.execute(
+            "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6);",
+            tournament.id,
+            tournament.name,
+            tournament.channel,
+            tournament.guild,
+            tournament.message,
+            tournament.running,
+        )
+        await db.close()
 
     async def get_tournament(self, id: uuid.UUID) -> Optional[Tournament]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT * FROM tournaments WHERE id=:id",
-                {
-                    "id": id,
-                },
-            ) as cur:
-                tr = await cur.fetchone()
+        db = await asyncpg.connect(config.postgres)
+        tr = await db.fetchrow("SELECT * FROM tournaments WHERE id=$1", id)
         if tr is not None:
             return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
@@ -223,35 +145,27 @@ class DatabaseCog(commands.Cog, name="Database"):
         name: str,
         guild: int,
     ) -> Optional[Tournament]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT * FROM tournaments WHERE name=:name AND guild=:guild;",
-                {
-                    "name": name,
-                    "guild": guild,
-                },
-            ) as cur:
-                tr = await cur.fetchone()
+        db = await asyncpg.connect(config.postgres)
+        tr = await db.fetchrow(
+            "SELECT * FROM tournaments WHERE name=$1 AND guild=$2;", name, guild
+        )
         if tr is not None:
             return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            async with db.execute(
-                "SELECT * FROM tournaments WHERE channel=:channel;",
-                {
-                    "channel": channel,
-                },
-            ) as cur:
-                tournaments: list[Tournament] = []
-                async for tr in cur:
-                    tournaments.append(
-                        Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
-                    )
+        db = await asyncpg.connect(config.postgres)
+        records = await db.fetchrow(
+            "SELECT * FROM tournaments WHERE channel=$1;", channel
+        )
+        tournaments: list[Tournament] = []
+        async for tr in records:
+            tournaments.append(
+                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
+            )
         return tournaments
 
     async def get_tournaments_by_guild(self, guild: int) -> list[Tournament]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM tournaments WHERE guild=:guild;",
                 {
@@ -266,20 +180,19 @@ class DatabaseCog(commands.Cog, name="Database"):
         return tournaments
 
     async def get_running_tournament(self, channel: int) -> Optional[Tournament]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM tournaments WHERE channel=:channel AND running=1;",
                 {
                     "channel": channel,
                 },
             ) as cur:
-                tr = await cur.fetchone()
+                tr = await cur.fetchrow()
         if tr is not None:
             return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def update_tournament(self, tournament: Tournament) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "UPDATE tournaments SET name=:name, channel=:channel, guild=:guild, message=:message, running=:running WHERE id = :id",
                 {
@@ -294,8 +207,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def delete_tournament(self, tournament: Tournament) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "DELETE FROM tournaments WHERE id = :id",
                 {
@@ -306,8 +218,7 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     # Match-related queries
     async def insert_match(self, match: Match) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "INSERT INTO matches VALUES (:name, :guild, :message, :running, :result, :games, :team1, :team2, :tournament, :bestof);",
                 {
@@ -326,7 +237,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def get_match(self, name: str, tournament: uuid.UUID) -> Optional[Match]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM matches WHERE name=:name AND tournament=:tournament",
                 {
@@ -334,7 +245,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     "tournament": tournament,
                 },
             ) as cur:
-                mr = await cur.fetchone()
+                mr = await cur.fetchrow()
         if mr is not None:
             return Match(
                 mr[0],
@@ -350,14 +261,14 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
 
     async def get_match_by_message(self, message: int) -> Optional[Match]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM matches WHERE message=:message",
                 {
                     "message": message,
                 },
             ) as cur:
-                mr = await cur.fetchone()
+                mr = await cur.fetchrow()
         if mr is not None:
             return Match(
                 mr[0],
@@ -376,7 +287,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         self,
         tournament: uuid.UUID,
     ) -> list[Match]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM matches WHERE tournament=:tournament",
                 {
@@ -405,7 +316,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         self,
         team: Team,
     ) -> list[Match]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM matches WHERE (team1 = :team OR team2 = :team) AND guild = :guild;",
                 {
@@ -436,7 +347,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournament: uuid.UUID,
         running: int,
     ) -> list[Match]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM matches WHERE tournament=:tournament AND running=:running",
                 {
@@ -463,8 +374,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         return matches
 
     async def update_match(self, match: Match) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "UPDATE matches SET guild=:guild, message=:message, running=:running, result=:result, games=:games, team1=:team1, team2=:team2, bestof=:bestof WHERE name=:name AND tournament=:tournament;",
                 {
@@ -483,8 +393,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def delete_match(self, match: Match) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "DELETE FROM matches WHERE name=:name AND tournament=:tournament;",
                 {
@@ -496,8 +405,7 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     # User-related queries
     async def insert_user(self, user: User) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "INSERT INTO users VALUES (:id, :name);",
                 {
@@ -508,20 +416,19 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def get_user(self, id: int) -> Optional[User]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM users WHERE id=:id",
                 {
                     "id": id,
                 },
             ) as cur:
-                ur = await cur.fetchone()
+                ur = await cur.fetchrow()
         if ur is not None:
             return User(ur[0], ur[1])
 
     async def update_user(self, user: User) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "UPDATE users SET name=:name WHERE id=:id;",
                 {
@@ -532,8 +439,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def delete_user(self, user: User) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "DELETE FROM users WHERE id=:id;",
                 {
@@ -544,8 +450,7 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     # UserMatch-related queries
     async def insert_usermatch(self, usermatch: UserMatch):
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "INSERT INTO users_matches VALUES (:user_id, :match_name, :match_tournament, :team, :games);",
                 {
@@ -564,7 +469,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         match_name: str,
         match_tournament: uuid.UUID,
     ) -> Optional[UserMatch]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM users_matches WHERE user_id=:user_id AND match_name=:match_name AND match_tournament=:match_tournament",
                 {
@@ -573,7 +478,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     "match_tournament": match_tournament,
                 },
             ) as cur:
-                umr = await cur.fetchone()
+                umr = await cur.fetchrow()
         if umr is not None:
             return UserMatch(umr[0], umr[1], umr[2], umr[3], umr[4])
 
@@ -582,7 +487,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         match_name: str,
         match_tournament: uuid.UUID,
     ) -> list[UserMatch]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             async with db.execute(
                 "SELECT * FROM users_matches WHERE match_name=:match_name AND match_tournament=:match_tournament",
                 {
@@ -598,8 +503,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         return usermatches
 
     async def update_usermatch(self, usermatch: UserMatch) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "UPDATE users_matches SET team=:team, games=:games WHERE user_id=:user_id, match_name=:match_name, match_tournament=:match_tournament;",
                 {
@@ -613,8 +517,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             await db.commit()
 
     async def delete_usermatch(self, usermatch: UserMatch) -> None:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
+        async with asyncpg.connect(config.postgres) as db:
             await db.execute(
                 "DELETE FROM users_matches WHERE user_id=:user_id, match_name=:match_name, match_tournament=:match_tournament;",
                 {
@@ -630,7 +533,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournament: uuid.UUID,
         scoring_table: dict[str, int],
     ) -> list[tuple[str, int]]:
-        async with aiosqlite.connect(self.db_path, detect_types=PARSE_DECLTYPES) as db:
+        async with asyncpg.connect(config.postgres) as db:
             parameter_dict: dict[str, Any] = {}
             parameter_dict.update(scoring_table)
             parameter_dict.update({"tournament": tournament})
@@ -639,7 +542,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     script.read(),
                     parameter_dict,
                 )
-                leaderboard = await cur.fetchall()
+                leaderboard = await cur.fetch()
         return leaderboard
 
 
