@@ -357,18 +357,16 @@ class DatabaseCog(commands.Cog, name="Database"):
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "UPDATE matches SET guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$10 WHERE name=$1 AND tournament=$9;",
-            {
-                "name": match.name,
-                "guild": match.guild,
-                "message": match.message,
-                "running": match.running,
-                "result": match.result,
-                "games": match.games,
-                "team1": match.team1,
-                "team2": match.team2,
-                "tournament": match.tournament,
-                "bestof": match.bestof,
-            },
+            match.name,
+            match.guild,
+            match.message,
+            match.running,
+            match.result,
+            match.games,
+            match.team1,
+            match.team2,
+            match.tournament,
+            match.bestof,
         )
         await db.close()
 
@@ -485,7 +483,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         scoring_table: dict[str, int],
     ) -> list[tuple[str, int]]:
         db = await asyncpg.connect(config.postgres)
-        with open("./src/database_scripts/leaderboard.sql", "r") as script:
+        with open("./src/database-scripts/leaderboard.sql", "r") as script:
             records = await db.fetch(
                 script.read(),
                 tournament,
