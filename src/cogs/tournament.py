@@ -607,7 +607,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Is valid score
         lower_bound = math.ceil(match.bestof / 2)
         upper_bound = match.bestof
-        if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
+        #if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
+        if not (lower_bound <= num_games <= upper_bound):
             raise CantEndMatch(
                 match,
                 f"{num_games} is not a valid number of games for a BO{match.bestof}.",
