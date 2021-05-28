@@ -1,9 +1,15 @@
-WITH tournament AS (SELECT tournaments.id FROM tournaments WHERE channel = 838762583762141214 AND running = 1),
---WITH tournament AS (
---    SELECT tournaments.id
---    FROM tournaments
---    WHERE tournaments.id = :tournament
---),
+-- $1 = tournament id
+-- $2 = bo1_team
+-- $3 = bo3_team
+-- $4 = bo5_team
+-- $5 = bo3_games
+-- $6 = bo5_games
+-- WITH tournament AS (SELECT tournaments.id FROM tournaments WHERE channel = 838762583762141214 AND running = 1),
+WITH tournament AS (
+    SELECT tournaments.id
+    FROM tournaments
+    WHERE tournaments.id = $1
+),
 finished_matches AS (
     SELECT matches.name,
         matches.tournament,
@@ -11,17 +17,17 @@ finished_matches AS (
         matches.games,
         (
             CASE
-                WHEN matches.bestof = 1 THEN :bo1_team
-                WHEN matches.bestof = 3 THEN :bo3_team
-                WHEN matches.bestof = 5 THEN :bo5_team
+                WHEN matches.bestof = 1 THEN $2
+                WHEN matches.bestof = 3 THEN $3
+                WHEN matches.bestof = 5 THEN $4
                 ELSE 0
             END
         ) as team_score,
         (
             CASE
                 WHEN matches.bestof = 1 THEN 0
-                WHEN matches.bestof = 3 THEN :bo3_games
-                WHEN matches.bestof = 5 THEN :bo5_games
+                WHEN matches.bestof = 3 THEN $5
+                WHEN matches.bestof = 5 THEN $6
                 ELSE 0
             END
         ) as game_score
@@ -46,7 +52,7 @@ SELECT name,
     COUNT(*) as total,
     (100.0 * SUM(team_correct)) / COUNT(*) as percent_correct
 FROM score_per_match
-GROUP BY id, name
+GROUP BY id,
+    name
 ORDER BY score DESC,
     name;
---GROUP BY users.id
