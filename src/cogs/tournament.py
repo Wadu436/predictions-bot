@@ -264,8 +264,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         team1 = teams[match.team1]
         team2 = teams[match.team2]
 
+        match_message_header = f"**{match.id}. {match.name}** - *BO{match.bestof}*"
         if match.running != 0:
-            match_message_header = f"**{match.name}** - *BO{match.bestof}*"
             if match.running == 2:
                 match_message_header += " - Closed"
             match_message_footer = (
@@ -273,12 +273,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
             )
         else:
             if match.result == 1:
-                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {match.win_games}-{match.lose_games}"
+                match_message_header += (
+                    f" - Result: {match.win_games}-{match.lose_games}"
+                )
                 match_message_footer = (
                     f"**{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji}"
                 )
             else:
-                match_message_header = f"**{match.name}** - *BO{match.bestof}* - Result: {match.lose_games}-{match.win_games}"
+                match_message_header += (
+                    f" - Result: {match.lose_games}-{match.win_games}"
+                )
                 match_message_footer = (
                     f"{team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}**"
                 )
