@@ -11,7 +11,7 @@ WITH tournament AS (
     WHERE tournaments.id = $1
 ),
 finished_matches AS (
-    SELECT matches.name,
+    SELECT matches.id,
         matches.tournament,
         matches.result,
         matches.games,
@@ -42,7 +42,7 @@ score_per_match AS (
         game_score * (users_matches.games = finished_matches.games)::int as game_score,
         (users_matches.team = finished_matches.result)::int as team_correct
     FROM finished_matches
-        INNER JOIN users_matches ON finished_matches.name = match_name
+        INNER JOIN users_matches ON finished_matches.id = match_id
         AND finished_matches.tournament = match_tournament
         INNER JOIN users ON user_id = users.id
 )

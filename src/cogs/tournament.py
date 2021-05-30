@@ -1,8 +1,10 @@
 import math
 import uuid
+from os import error
 from typing import Optional
 
 import discord
+from discord import team
 from discord.ext import commands
 
 from src import decorators
@@ -91,6 +93,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         "bo5_team": 3,
         "bo5_games": 1,
     }
+    dialogs: dict[int, int] = {}  # (dialog message, match message)
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -151,7 +154,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             # Insert usermatch
             usermatch = UserMatch(
                 user.id,
-                match.name,
+                match.id,
                 match.tournament,
                 team_dict.get(user.id, 0),
                 games_dict.get(user.id, 0),
@@ -505,7 +508,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         message = await ctx.send("Match is starting...")
 
         # Calculate match id
-        id = await db_cog.get_num_matches(tournament) + 1
+        id = await db_cog.get_num_matches(tournament.id) + 1
 
         # Insert
         match = Match(
@@ -545,13 +548,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="close",
         brief="Closes predictions for a match.",
-        description='Closes predictions on the specified match.\n\nArguments:\n-Match id, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).',
+        description='Closes predictions on the specified matches.\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces',
         aliases=["c"],
-        usage="<id>",
+        usage="<ids>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def match_close(self, ctx, *, id: int):
+    async def match_close(self, ctx, *ids: int):
         # Validate input
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -560,38 +563,36 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournament is None:
             raise TournamentNotRunning()
 
-        # Is name a running match
-        match = await db_cog.get_match(id, tournament.id)
-        if match is None:
-            raise MatchDoesntExist()
-        if match.running != 1:
-            raise CantCloseMatch(match, "This is not an open match")
+        errors = []
+        for id in ids:
+            # Is name a running match
+            match = await db_cog.get_match(id, tournament.id)
+            if match is None:
+                errors += [f"Match with id {id} does not exist."]
+                continue
+            if match.running != 1:
+                errors += [f"Match with id {id} is not an open match."]
+                continue
 
-        await self.save_votes(match, tournament)
+            await self.save_votes(match, tournament)
 
-        match.running = 2
-        await db_cog.update_match(match)
+            match.running = 2
+            await db_cog.update_match(match)
 
-        await self.update_match_message(match)
+            await self.update_match_message(match)
+        await ctx.send("\n".join(errors))
         await ctx.message.delete()
 
     @match_group.command(
         name="end",
         brief="Ends a match.",
-        description='Ends the match.\n\nArguments:\n-Match id, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-Short codes must be for teams that exist in this server.\n-Played games depends on what type of match it is (BO1, 3 or 5).',
+        description='Ends the match.\n\nArguments:\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces',
         aliases=["e"],
-        usage="<name> <winning team code> <played games>",
+        usage="<ids>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    @decorators.regex_arguments("(.+) (\\S+) (\\S+)")
-    async def match_end(
-        self,
-        ctx,
-        id: int,
-        code: CodeConverter(True),
-        num_games: int,
-    ):
+    async def match_end(self, ctx, *ids: int):
         # Validate input
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -600,66 +601,46 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournament is None:
             raise TournamentNotRunning()
 
-        # Is reference a running or closed match
-        match = await db_cog.get_match(id, tournament.id)
-        if match is None:
-            raise MatchDoesntExist()
-        if match.running not in (1, 2):
-            raise CantEndMatch(match, "This match has already ended.")
+        for id in ids:
+            # Is reference a running or closed match
+            match = await db_cog.get_match(id, tournament.id)
+            if match is None:
+                raise MatchDoesntExist()
+            if match.running not in (1, 2):
+                raise CantEndMatch(match, "This match has already ended.")
 
-        # Is valid score
-        lower_bound = math.ceil(match.bestof / 2)
-        upper_bound = match.bestof
-        # if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
-        if not (lower_bound <= num_games <= upper_bound):
-            raise CantEndMatch(
-                match,
-                f"{num_games} is not a valid number of games for a BO{match.bestof}.",
+            if match.running == 1:
+                await self.save_votes(match, tournament)
+
+            # Create dialog message
+            message: discord.Message = await ctx.send(
+                f"Who won game {match.name} and in how many games?"
             )
 
-        # Is team code one of the participants
-        if code == match.team1:
-            match.result = 1
-        elif code == match.team2:
-            match.result = 2
-        else:
-            raise CantEndMatch(match, f"Team {code} is not a participant.")
+            team1 = await db_cog.get_team(match.team1, tournament.guild)
+            team2 = await db_cog.get_team(match.team2, tournament.guild)
 
-        if match.running == 1:
-            await self.save_votes(match, tournament)
+            # Add Team reacts
+            await message.add_reaction(team1.emoji)
+            await message.add_reaction(team2.emoji)
 
-        match.running = 0
-        match.games = num_games
+            # Add Games reacts
+            games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
-        if match.team1 == code:
-            match.result = 1
-        elif match.team2 == code:
-            match.result = 2
+            if match.bestof > 1:
+                for i in range(math.floor(match.bestof / 2), match.bestof):
+                    await message.add_reaction(games_emojis[i])
 
-        await db_cog.update_match(match)
-        match = Match(
-            match.id,
-            match.name,
-            match.guild,
-            match.message,
-            match.running,
-            match.result,
-            match.games,
-            match.team1,
-            match.team2,
-            match.tournament,
-            match.bestof,
-        )  # Refresh match (winning and losing games)
+            await message.add_reaction("✅")
+            self.dialogs[message.id] = match.message
 
-        await self.update_match_message(match)
-        await self.update_tournament_message(tournament)
         await ctx.message.delete()
 
     @match_group.command(
         name="fix",
         brief="Fix match.",
         description="Fixes emotes on a match.",
-        usage="<name>",
+        usage="<id>",
     )
     @commands.guild_only()
     @commands.is_owner()
@@ -741,31 +722,34 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if past_matches:
             paginator.add_line("")
             paginator.add_line(f"**Ended Matches:**")
+            past_matches.sort(key=lambda x: x.id)
             for match in past_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
 
                 if match.result == 1:
-                    match_content = f"{match.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
+                    match_content = f"{match.id}. {match.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
                 elif match.result == 2:
-                    match_content = f"{match.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
+                    match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
                 paginator.add_line(match_content)
 
         if closed_matches:
             paginator.add_line("")
             paginator.add_line(f"**Closed Matches:**")
+            closed_matches.sort(key=lambda x: x.id)
             for match in closed_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
+                match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
         if active_matches:
             paginator.add_line("")
             paginator.add_line(f"**Open Matches:**")
+            active_matches.sort(key=lambda x: x.id)
             for match in active_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-                match_content = f"{match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
+                match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
 
         if not (past_matches or closed_matches or active_matches):
@@ -786,44 +770,140 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if payload.user_id == self.bot.user.id:
             return False
 
-        # We only care about running matches
+        # Check if message is a match or in dialogs
         match: Optional[Match] = await db_cog.get_match_by_message(payload.message_id)
-        if match is None:
-            return
-        if match.running != 1:
-            return
+        if match is not None and match.running == 1:
+            # Fetch channel and message
+            channel = self.bot.get_channel(payload.channel_id)
+            message: discord.Message = await channel.fetch_message(payload.message_id)
 
-        # Fetch channel and message
-        channel = self.bot.get_channel(payload.channel_id)
-        message: discord.Message = await channel.fetch_message(payload.message_id)
+            team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
+            team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
 
-        team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
-        team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
+            to_remove = set()
+            emoji = str(payload.emoji)
 
-        to_remove = set()
-        emoji = str(payload.emoji)
+            # Team
+            team_emoji = {team1.emoji, team2.emoji}
+            if emoji in team_emoji:
+                team_emoji.remove(emoji)
+                to_remove.update(team_emoji)
 
-        # Team
-        team_emoji = {team1.emoji, team2.emoji}
-        if emoji in team_emoji:
-            team_emoji.remove(emoji)
-            to_remove.update(team_emoji)
+            # Games
+            if match.bestof > 1:
+                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+                games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
+                games_emojis = set(games_emojis)
+                if emoji in games_emojis:
+                    games_emojis.remove(emoji)
+                    to_remove.update(games_emojis)
 
-        # Games
-        if match.bestof > 1:
-            games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-            games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
-            games_emojis = set(games_emojis)
-            if emoji in games_emojis:
-                games_emojis.remove(emoji)
-                to_remove.update(games_emojis)
+            for reaction in message.reactions:
+                if str(reaction) not in to_remove:
+                    continue
+                react_user = await reaction.users().get(id=payload.user_id)
+                if react_user is not None:
+                    await message.remove_reaction(
+                        reaction, discord.Object(payload.user_id)
+                    )
 
-        for reaction in message.reactions:
-            if str(reaction) not in to_remove:
-                continue
-            react_user = await reaction.users().get(id=payload.user_id)
-            if react_user is not None:
+        # Check if message is a dialog message
+        if (payload.message_id in self.dialogs.keys()) and (str(payload.emoji) == "✅"):
+            # Fetch channel and message
+            channel: discord.abc.Messageable = self.bot.get_channel(payload.channel_id)
+            message: discord.Message = await channel.fetch_message(payload.message_id)
+
+            # Check if user has manage messages permission
+            perms = payload.member.permissions_in(channel)
+            if not perms.manage_messages:
                 await message.remove_reaction(reaction, discord.Object(payload.user_id))
+                return
+
+            # End match
+
+            # Fetch match
+            match: Optional[Match] = await db_cog.get_match_by_message(
+                self.dialogs[payload.message_id]
+            )
+
+            team1: Optional[Team] = await db_cog.get_team(match.team1, match.guild)
+            team2: Optional[Team] = await db_cog.get_team(match.team2, match.guild)
+
+            # Find choices
+            team_choice = 0
+            game_choice = 1
+
+            games_emojis = []
+            # Find games choice
+            if match.bestof > 1:
+                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+                games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
+                game_choice = 0
+
+            for r in message.reactions:
+                if str(r) in [team1.emoji, team2.emoji]:
+                    react_user = await r.users().get(id=payload.user_id)
+                    if react_user is not None:
+                        if team_choice == 0:
+                            if str(r) == team1.emoji:
+                                team_choice = 1  # team 1
+                            else:
+                                team_choice = 2  # team 2
+                        else:
+                            team_choice = -1  # two teams selected -> invalid
+                if str(r) in games_emojis:
+                    react_user = await r.users().get(id=payload.user_id)
+                    if react_user is not None:
+                        if game_choice == 0:
+                            index = games_emojis.index(str(r))
+                            game_choice = math.floor(match.bestof / 2) + index + 1
+                        else:
+                            game_choice = -1  # two+ game choices selected -> invalid
+
+            if team_choice == -1:
+                await channel.send("You can only select one team!")
+                await message.remove_reaction("✅", discord.Object(payload.user_id))
+                return
+            if team_choice == 0:
+                await channel.send("You must select a team!")
+                await message.remove_reaction("✅", discord.Object(payload.user_id))
+                return
+
+            if game_choice == -1:
+                await channel.send("You can only select one amount of games!")
+                await message.remove_reaction("✅", discord.Object(payload.user_id))
+                return
+            if game_choice == 0:
+                await channel.send("You must select an amount of games!")
+                await message.remove_reaction("✅", discord.Object(payload.user_id))
+                return
+
+            match.running = 0
+            match.games = game_choice
+            match.result = team_choice
+
+            await db_cog.update_match(match)
+            match = Match(
+                match.id,
+                match.name,
+                match.guild,
+                match.message,
+                match.running,
+                match.result,
+                match.games,
+                match.team1,
+                match.team2,
+                match.tournament,
+                match.bestof,
+            )  # Refresh match (winning and losing games)
+
+            tournament = await db_cog.get_tournament(match.tournament)
+            await self.update_match_message(match)
+            await self.update_tournament_message(tournament)
+
+            # Delete dialog
+            await message.delete()
+            self.dialogs.pop(payload.message_id)
 
     async def cog_command_error(self, ctx, error):
         message = ""

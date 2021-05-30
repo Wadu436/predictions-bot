@@ -58,7 +58,7 @@ class Match:
 @dataclass
 class UserMatch:
     user_id: int
-    match_name: str
+    match_id: int
     match_tournament: uuid.UUID
     team: int
     games: int
@@ -363,7 +363,7 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def update_match(self, match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE matches SET guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$10 WHERE name=$1 AND tournament=$9;",
+            "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9 WHERE id=$10 AND tournament=$11;",
             match.name,
             match.guild,
             match.message,
@@ -372,8 +372,9 @@ class DatabaseCog(commands.Cog, name="Database"):
             match.games,
             match.team1,
             match.team2,
-            match.tournament,
             match.bestof,
+            match.id,
+            match.tournament,
         )
         await db.close()
 
@@ -419,7 +420,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         await db.execute(
             "INSERT INTO users_matches VALUES ($1, $2, $3, $4, $5);",
             usermatch.user_id,
-            usermatch.match_name,
+            usermatch.match_id,
             usermatch.match_tournament,
             usermatch.team,
             usermatch.games,
@@ -429,14 +430,14 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def get_usermatch(
         self,
         user_id: int,
-        match_name: str,
+        match_id: int,
         match_tournament: uuid.UUID,
     ) -> Optional[UserMatch]:
         db = await asyncpg.connect(config.postgres)
         umr = await db.fetchrow(
-            "SELECT * FROM users_matches WHERE user_id=$1 AND match_name=$2 AND match_tournament=$3",
+            "SELECT * FROM users_matches WHERE user_id=$1 AND match_id=$2 AND match_tournament=$3",
             user_id,
-            match_name,
+            match_id,
             match_tournament,
         )
         await db.close()
@@ -445,13 +446,13 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     async def get_usermatch_by_match(
         self,
-        match_name: str,
+        match_id: str,
         match_tournament: uuid.UUID,
     ) -> list[UserMatch]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch(
-            "SELECT * FROM users_matches WHERE match_name=$1 AND match_tournament=$2",
-            match_name,
+            "SELECT * FROM users_matches WHERE match_id=$1 AND match_tournament=$2",
+            match_id,
             match_tournament,
         )
         await db.close()
@@ -465,11 +466,11 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def update_usermatch(self, usermatch: UserMatch) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE users_matches SET team=$1, games=$2 WHERE user_id=$3, match_name=$4, match_tournament=$5;",
+            "UPDATE users_matches SET team=$1, games=$2 WHERE user_id=$3, match_id=$4, match_tournament=$5;",
             usermatch.team,
             usermatch.games,
             usermatch.user_id,
-            usermatch.match_name,
+            usermatch.match_id,
             usermatch.match_tournament,
         )
         await db.close()
@@ -477,9 +478,9 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def delete_usermatch(self, usermatch: UserMatch) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "DELETE FROM users_matches WHERE user_id=$1, match_name=$2, match_tournament=$3;",
+            "DELETE FROM users_matches WHERE user_id=$1, match_id=$2, match_tournament=$3;",
             usermatch.user_id,
-            usermatch.match_name,
+            usermatch.match_id,
             usermatch.match_tournament,
         )
         await db.close()
@@ -505,8 +506,9 @@ class DatabaseCog(commands.Cog, name="Database"):
 
     async def get_num_matches(self, tournament: uuid.UUID):
         db = await asyncpg.connect(config.postgres)
-        row = db.fetchrow(
-            "SELECT COUNT(*) FROM matches WHERE tournament=$1", tournament
+        row = await db.fetchrow(
+            "SELECT COUNT(*) FROM matches WHERE tournament=$1",
+            tournament,
         )
         return int(row[0])
 

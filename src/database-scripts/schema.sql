@@ -39,11 +39,11 @@ CREATE TABLE matches (
 );
 CREATE TABLE users_matches (
     user_id bigint NOT NULL,
-    match_name TEXT NOT NULL,
+    match_id INTEGER NOT NULL,
     match_tournament UUID NOT NULL,
     team INTEGER NOT NULL,
     games INTEGER NOT NULL,
-    PRIMARY KEY(user_id, match_name, match_tournament),
+    PRIMARY KEY(user_id, match_id, match_tournament),
     FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE CASCADE,
-    FOREIGN KEY (match_name, match_tournament) REFERENCES matches (name, tournament) ON UPDATE CASCADE ON DELETE CASCADE
+    FOREIGN KEY (match_id, match_tournament) REFERENCES matches (id, tournament) ON UPDATE CASCADE ON DELETE CASCADE
 );
