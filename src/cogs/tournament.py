@@ -494,19 +494,18 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournament is None:
             raise TournamentNotRunning()
 
-        # Check if game with this name already exists
-        existing_match = await db_cog.get_match(name, tournament.id)
-        if existing_match is not None:
-            raise MatchAlreadyExists(existing_match)
-
         team1: Optional[Team] = await db_cog.get_team(team1_code, ctx.guild.id)
         team2: Optional[Team] = await db_cog.get_team(team2_code, ctx.guild.id)
 
         # Send message
         message = await ctx.send("Match is starting...")
 
+        # Calculate match id
+        id = await db_cog.get_num_matches(tournament) + 1
+
         # Insert
         match = Match(
+            id,
             name,
             ctx.guild.id,
             message.id,
@@ -542,13 +541,13 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="close",
         brief="Closes predictions for a match.",
-        description="Closes predictions on the specified match.\n\nArguments:\n-Match name can contain spaces.",
+        description='Closes predictions on the specified match.\n\nArguments:\n-Match id, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).',
         aliases=["c"],
-        usage="<name>",
+        usage="<id>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def match_close(self, ctx, *, name):
+    async def match_close(self, ctx, *, id: int):
         # Validate input
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
@@ -558,7 +557,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             raise TournamentNotRunning()
 
         # Is name a running match
-        match = await db_cog.get_match(name, tournament.id)
+        match = await db_cog.get_match(id, tournament.id)
         if match is None:
             raise MatchDoesntExist()
         if match.running != 1:
@@ -575,7 +574,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="end",
         brief="Ends a match.",
-        description="Ends the match.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-Played games depends on what type of match it is (BO1, 3 or 5).",
+        description='Ends the match.\n\nArguments:\n-Match id, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-Short codes must be for teams that exist in this server.\n-Played games depends on what type of match it is (BO1, 3 or 5).',
         aliases=["e"],
         usage="<name> <winning team code> <played games>",
     )
@@ -585,7 +584,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def match_end(
         self,
         ctx,
-        name: str,
+        id: int,
         code: CodeConverter(True),
         num_games: int,
     ):
@@ -598,7 +597,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             raise TournamentNotRunning()
 
         # Is reference a running or closed match
-        match = await db_cog.get_match(name, tournament.id)
+        match = await db_cog.get_match(id, tournament.id)
         if match is None:
             raise MatchDoesntExist()
         if match.running not in (1, 2):
@@ -607,7 +606,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Is valid score
         lower_bound = math.ceil(match.bestof / 2)
         upper_bound = match.bestof
-        #if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
+        # if not ((lower_bound <= num_games) and (num_games <= upper_bound)):
         if not (lower_bound <= num_games <= upper_bound):
             raise CantEndMatch(
                 match,
@@ -634,8 +633,18 @@ class TournamentCog(commands.Cog, name="Tournament"):
             match.result = 2
 
         await db_cog.update_match(match)
-        match = await db_cog.get_match(
-            match.name, match.tournament
+        match = Match(
+            match.id,
+            match.name,
+            match.guild,
+            match.message,
+            match.running,
+            match.result,
+            match.games,
+            match.team1,
+            match.team2,
+            match.tournament,
+            match.bestof,
         )  # Refresh match (winning and losing games)
 
         await self.update_match_message(match)
@@ -645,12 +654,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="fix",
         brief="Fix match.",
-        description="Fixes emotes on a match.\n\nArguments:\n-Match name can contain spaces.",
+        description="Fixes emotes on a match.",
         usage="<name>",
     )
     @commands.guild_only()
     @commands.is_owner()
-    async def match_fix(self, ctx: commands.Context, *, name: str):
+    async def match_fix(self, ctx: commands.Context, *, id: int):
         db_cog: DatabaseCog = self.bot.get_cog("Database")
 
         tournament: Optional[Tournament] = await db_cog.get_running_tournament(
@@ -659,7 +668,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournament is None:
             raise TournamentNotRunning()
 
-        match: Optional[Match] = await db_cog.get_match(name, tournament.id)
+        match: Optional[Match] = await db_cog.get_match(id, tournament.id)
         if match is None:
             raise MatchDoesntExist()
 

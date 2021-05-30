@@ -40,10 +40,11 @@ class Match:
         self.win_games = math.ceil(self.bestof / 2)
         self.lose_games = self.games - self.win_games
 
+    id: int
     name: str
     guild: int
     message: int
-    running: int
+    running: bool
     result: int
     games: int
     team1: str
@@ -212,7 +213,8 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def insert_match(self, match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "INSERT INTO matches VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);",
+            "INSERT INTO matches VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
+            match.id,
             match.name,
             match.guild,
             match.message,
@@ -226,11 +228,11 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def get_match(self, name: str, tournament: uuid.UUID) -> Optional[Match]:
+    async def get_match(self, id: int, tournament: uuid.UUID) -> Optional[Match]:
         db = await asyncpg.connect(config.postgres)
         mr = await db.fetchrow(
-            "SELECT * FROM matches WHERE name=$1 AND tournament=$2",
-            name,
+            "SELECT * FROM matches WHERE id=$1 AND tournament=$2",
+            id,
             tournament,
         )
         await db.close()
@@ -246,6 +248,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[7],
                 mr[8],
                 mr[9],
+                mr[10],
             )
 
     async def get_match_by_message(self, message: int) -> Optional[Match]:
@@ -264,6 +267,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[7],
                 mr[8],
                 mr[9],
+                mr[10],
             )
 
     async def get_matches_by_tournament(
@@ -290,6 +294,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[7],
                     mr[8],
                     mr[9],
+                    mr[10],
                 ),
             )
         return matches
@@ -319,6 +324,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[7],
                     mr[8],
                     mr[9],
+                    mr[10],
                 ),
             )
         return matches
@@ -349,6 +355,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[7],
                     mr[8],
                     mr[9],
+                    mr[10],
                 ),
             )
         return matches
@@ -495,6 +502,13 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
         leaderboard = [list(record) for record in records]
         return leaderboard
+
+    async def get_num_matches(self, tournament: uuid.UUID):
+        db = await asyncpg.connect(config.postgres)
+        row = db.fetchrow(
+            "SELECT COUNT(*) FROM matches WHERE tournament=$1", tournament
+        )
+        return int(row[0])
 
 
 def setup(bot):
