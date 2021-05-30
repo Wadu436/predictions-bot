@@ -9,7 +9,6 @@ Python 3.9+ \
 
 ## Usage
 Create config.py in the root directory. \
-
 ```py
 postgres = "" # your postgresql link
 token = "" # your discord bot token
