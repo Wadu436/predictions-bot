@@ -8,6 +8,12 @@ Python 3.9+ \
 [aiosqlite](https://pypi.org/project/aiosqlite/) 
 
 ## Usage
+Create config.py in the root directory. \
+
+```py
+postgres = "" # your postgresql link
+```
+
 Install the requirements: `pip install -r requirements.txt` \
 Run `python main.py`  \
 Enter your token 
