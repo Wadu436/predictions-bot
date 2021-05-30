@@ -12,6 +12,7 @@ Create config.py in the root directory. \
 
 ```py
 postgres = "" # your postgresql link
+token = "" # your discord bot token
 ```
 
 Install the requirements: `pip install -r requirements.txt` \

@@ -1,13 +1,11 @@
-import json
 import logging
 import sqlite3
 import traceback
-from pathlib import Path
-from typing import Optional
 
 import discord
 from discord.ext import commands
 
+import config
 from src.converters import EmojiNotFound, EmojiNotInGuild, TeamDoesntExist, TeamExist
 
 PREFIX = "+"
@@ -250,30 +248,11 @@ async def on_command_error(ctx, error):
 
 
 def launch():
-    # Load json and token
-    logging.debug("Loading config")
-    configPath = Path("./persistent/config.json")
-    if not configPath.exists():
-        config: dict[str, Optional[str]] = {"token": None}
-        with open(configPath, "w") as f:
-            json.dump(config, f)
-    else:
-        with open(configPath, "r") as f:
-            config = json.load(f)
-    logging.debug("Finished loading config")
-
-    if config["token"] is None:
-        logging.info("Could not find token. Please enter it: ")
-        config["token"] = input()
-        with open(configPath, "w") as f:
-            json.dump(config, f)
-        logging.info(f"If this token is incorrect, you can change it in {configPath}")
-
     # Start bot
     logging.debug("Starting bot")
     for cog in initial_extensions:
         logging.debug(f"Loading extension {cog}")
         load_extension_wrapper(cog)
 
-    bot.run(config["token"], bot=True, reconnect=True)
+    bot.run(config.token, bot=True, reconnect=True)
     logging.debug("Shutting down")
