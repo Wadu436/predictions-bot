@@ -613,10 +613,24 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if match.running == 1:
                 await self.save_votes(match, tournament)
 
+                match.running = 2
+                await db_cog.update_match(match)
+
+                await self.update_match_message(match)
+
+            # Check if dialog already exists
+            if match.message in self.dialogs.values():
+                await ctx.send("This match is already being ended!")
+                return
+
             # Create dialog message
-            message: discord.Message = await ctx.send(
-                f"Who won game {match.name} and in how many games?"
-            )
+            txt = f'**Match End:** Which team won in "{match.name}"'
+            if match.bestof > 1:
+                txt += " and in how many games"
+            txt += "? Press ✅ after you're done to end the match."
+            message: discord.Message = await ctx.send(txt)
+
+            self.dialogs[message.id] = match.message
 
             team1 = await db_cog.get_team(match.team1, tournament.guild)
             team2 = await db_cog.get_team(match.team2, tournament.guild)
@@ -633,7 +647,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     await message.add_reaction(games_emojis[i])
 
             await message.add_reaction("✅")
-            self.dialogs[message.id] = match.message
 
         await ctx.message.delete()
 
