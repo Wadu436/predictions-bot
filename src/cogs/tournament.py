@@ -580,7 +580,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             await db_cog.update_match(match)
 
             await self.update_match_message(match)
-        await ctx.send("\n".join(errors))
+        if errors:
+            await ctx.send("\n".join(errors))
         await ctx.message.delete()
 
     @match_group.command(
