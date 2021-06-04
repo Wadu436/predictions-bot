@@ -530,7 +530,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         usermatches: list[UserMatch] = []
-        async for umr in records:
+        for umr in records:
             usermatches.append(
                 UserMatch(umr[0], umr[1], umr[2], umr[3], umr[4]),
             )
