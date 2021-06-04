@@ -425,7 +425,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         brief="Shows info on a tournament.",
         description="Shows info on a tournament in this server. If no name is given, it shows info on the currently running tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
         aliases=["i"],
-        usage="<tournament name>",
+        usage="[tournament name]",
     )
     @commands.guild_only()
     async def tournament_show(self, ctx, *, name: Optional[str]):
@@ -444,6 +444,30 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         content = await self.generate_tournament_message(tournament)
         await ctx.send(content + "\n`This message does not get updated.`")
+
+    @tournament_group.command(
+        name="setupdates",
+        brief="Sets this channel to display updates on the tournament (Who predicted correctly, etc.).",
+        description="Sets this channel to display updates on the tournament (Who predicted correctly, etc.).\n\nArguments:\n-Tournament name can contain spaces.",
+        usage="<tournament name>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_updates(self, ctx, *, name: str):
+        db_cog: DatabaseCog = self.bot.get_cog("Database")
+
+        tournament = await db_cog.get_tournament_by_name(name, ctx.guild.id)
+        txt = "No tournament with this name exists in this guild."
+
+        # Check if tournament exists
+        if tournament is None:
+            raise NoTournament(txt)
+
+        tournament.updatesChannel = ctx.channel.id
+        await db_cog.update_tournament(tournament)
+        await ctx.send(
+            f"This channel will now display updates on the tournament {tournament.name}."
+        )
 
     @tournament_group.command(
         name="list",
@@ -624,7 +648,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 return
 
             # Create dialog message
-            txt = f'**Match End:** Which team won in "{match.name}"'
+            txt = f'**Match End:** Which team won in match {match.id} "{match.name}"'
             if match.bestof > 1:
                 txt += " and in how many games"
             txt += "? Press ✅ after you're done to end the match."
@@ -914,6 +938,49 @@ class TournamentCog(commands.Cog, name="Tournament"):
             tournament = await db_cog.get_tournament(match.tournament)
             await self.update_match_message(match)
             await self.update_tournament_message(tournament)
+
+            # Send update message if necesary
+            if tournament.updatesChannel is not None:
+                channel = self.bot.get_channel(tournament.updatesChannel)
+                # get all winning users
+                ums: list[UserMatch] = await db_cog.get_usermatch_by_match(
+                    match.id, match.tournament
+                )
+
+                team_winners: list[str] = []
+                for um in ums:
+                    if um.team == match.result:
+                        user = await db_cog.get_user(um.user_id)
+                        team_winners.append(user.name)
+
+                msg = f"**Match {match.id} ({match.name}) has ended!**"
+
+                if len(team_winners) == 0:
+                    msg += "\n**Noone** predicted the correct team."
+                elif len(team_winners) == 1:
+                    msg += f"\n**{team_winners[0]}** predicted the correct team."
+                elif len(team_winners) == 2:
+                    msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
+                else:
+                    msg += f"\n**{','.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
+
+                if match.bestof > 1:
+                    game_winners: list[str] = []
+                    for um in ums:
+                        if um.games == match.games:
+                            user = await db_cog.get_user(um.user_id)
+                            game_winners.append(user.name)
+
+                    if len(game_winners) == 0:
+                        msg += "\n**Noone** predicted the correct amount of games."
+                    elif len(game_winners) == 1:
+                        msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
+                    elif len(game_winners) == 2:
+                        msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
+                    else:
+                        msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
+
+                await channel.send(msg)
 
             # Delete dialog
             await message.delete()
