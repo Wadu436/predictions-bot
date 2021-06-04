@@ -962,7 +962,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 elif len(team_winners) == 2:
                     msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
                 else:
-                    msg += f"\n**{','.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
+                    msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
 
                 if match.bestof > 1:
                     game_winners: list[str] = []
