@@ -16,6 +16,8 @@ class Team:
     code: str
     emoji: str
     guild: int
+    isfandom: bool = False
+    fandomOverviewPage: str = None
 
 
 @dataclass
@@ -77,11 +79,13 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def insert_team(self, team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "INSERT INTO teams VALUES ($1, $2, $3, $4);",
+            "INSERT INTO teams VALUES ($1, $2, $3, $4, $5, $6);",
             team.name,
             team.code,
             team.emoji,
             team.guild,
+            team.isfandom,
+            team.fandomOverviewPage,
         )
         await db.close()
 
@@ -94,26 +98,28 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         if tr is not None:
-            return Team(tr[0], tr[1], tr[2], tr[3])
+            return Team(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
     async def get_teams_by_guild(self, guild: int) -> list[Team]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch("SELECT * FROM teams WHERE guild=$1", guild)
         teams: list[Team] = []
         for tr in records:
-            teams.append(Team(tr[0], tr[1], tr[2], tr[3]))
+            teams.append(Team(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]))
         await db.close()
         return teams
 
     async def update_team(self, original_code, team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE teams SET name=$1, code=$2, emoji=$3 WHERE code=$4 AND guild=$5;",
+            "UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, fandomOverviewPage=$7 WHERE code=$4 AND guild=$5;",
             team.name,
             team.code,
             team.emoji,
             original_code,
             team.guild,
+            team.isfandom,
+            team.fandomOverviewPage,
         )
         await db.close()
 

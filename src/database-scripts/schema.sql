@@ -3,6 +3,8 @@ CREATE TABLE teams (
     code TEXT NOT NULL,
     emoji TEXT NOT NULL,
     guild bigint NOT NULL,
+    isfandom BOOLEAN NOT NULL,
+    fandomOverviewPage TEXT,
     PRIMARY KEY(code, guild)
 );
 CREATE TABLE users (
