@@ -17,9 +17,13 @@ CREATE TABLE tournaments (
     guild bigint NOT NULL,
     message bigint NOT NULL,
     running INTEGER NOT NULL,
+    isfandom BOOLEAN NOT NULL,
+    fandomOverviewPage TEXT,
     PRIMARY KEY(id),
     UNIQUE(name, guild)
 );
+--These are series rather than individual games
+--MatchId 
 CREATE TABLE matches (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -32,6 +36,7 @@ CREATE TABLE matches (
     team2 TEXT NOT NULL,
     tournament UUID NOT NULL,
     bestof INTEGER NOT NULL,
+    fandomMatchId TEXT,
     PRIMARY KEY(id, tournament),
     FOREIGN KEY (team1, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
     FOREIGN KEY (team2, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,

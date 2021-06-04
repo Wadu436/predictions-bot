@@ -32,6 +32,8 @@ class Tournament:
     guild: int
     message: int
     running: int
+    isfandom: bool = False
+    fandomOverviewPage: str = None
 
 
 @dataclass
@@ -53,6 +55,7 @@ class Match:
     bestof: int
     win_games: int = field(init=False)
     lose_games: int = field(init=False)
+    fandomMatchId: str = None
 
 
 @dataclass
@@ -127,13 +130,15 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def insert_tournament(self, tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6);",
+            "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
             tournament.id,
             tournament.name,
             tournament.channel,
             tournament.guild,
             tournament.message,
             tournament.running,
+            tournament.isfandom,
+            tournament.fandomOverviewPage,
         )
         await db.close()
 
@@ -142,7 +147,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         tr = await db.fetchrow("SELECT * FROM tournaments WHERE id=$1", id)
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
 
     async def get_tournament_by_name(
         self,
@@ -157,7 +162,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
 
     async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
         db = await asyncpg.connect(config.postgres)
@@ -166,7 +171,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournaments: list[Tournament] = []
         for tr in records:
             tournaments.append(
-                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
+                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
             )
         return tournaments
 
@@ -177,7 +182,7 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournaments: list[Tournament] = []
         for tr in records:
             tournaments.append(
-                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]),
+                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
             )
         return tournaments
 
@@ -189,18 +194,20 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
+            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
 
     async def update_tournament(self, tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6 WHERE id=$1",
+            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomOverviewPage=$8 WHERE id=$1",
             tournament.id,
             tournament.name,
             tournament.channel,
             tournament.guild,
             tournament.message,
             tournament.running,
+            tournament.isfandom,
+            tournament.fandomOverviewPage,
         )
         await db.close()
 
@@ -213,7 +220,7 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def insert_match(self, match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "INSERT INTO matches VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);",
+            "INSERT INTO matches VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);",
             match.id,
             match.name,
             match.guild,
@@ -225,6 +232,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             match.team2,
             match.tournament,
             match.bestof,
+            match.fandomMatchId,
         )
         await db.close()
 
@@ -249,6 +257,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[8],
                 mr[9],
                 mr[10],
+                mr[11],
             )
 
     async def get_match_by_message(self, message: int) -> Optional[Match]:
@@ -268,6 +277,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[8],
                 mr[9],
                 mr[10],
+                mr[11],
             )
 
     async def get_matches_by_tournament(
@@ -295,6 +305,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[8],
                     mr[9],
                     mr[10],
+                    mr[11],
                 ),
             )
         return matches
@@ -325,6 +336,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[8],
                     mr[9],
                     mr[10],
+                    mr[11],
                 ),
             )
         return matches
@@ -356,6 +368,7 @@ class DatabaseCog(commands.Cog, name="Database"):
                     mr[8],
                     mr[9],
                     mr[10],
+                    mr[11],
                 ),
             )
         return matches
@@ -363,7 +376,7 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def update_match(self, match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9 WHERE id=$10 AND tournament=$11;",
+            "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9, fandomMatchId=$12 WHERE id=$10 AND tournament=$11;",
             match.name,
             match.guild,
             match.message,
@@ -375,6 +388,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             match.bestof,
             match.id,
             match.tournament,
+            match.fandomMatchId,
         )
         await db.close()
 
