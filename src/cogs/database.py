@@ -36,6 +36,7 @@ class Tournament:
     running: int
     isfandom: bool = False
     fandomOverviewPage: str = None
+    updatesChannel: int = None
 
 
 @dataclass
@@ -136,7 +137,7 @@ class DatabaseCog(commands.Cog, name="Database"):
     async def insert_tournament(self, tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
+            "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);",
             tournament.id,
             tournament.name,
             tournament.channel,
@@ -145,6 +146,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             tournament.running,
             tournament.isfandom,
             tournament.fandomOverviewPage,
+            tournament.updatesChannel,
         )
         await db.close()
 
@@ -153,7 +155,17 @@ class DatabaseCog(commands.Cog, name="Database"):
         tr = await db.fetchrow("SELECT * FROM tournaments WHERE id=$1", id)
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
+            return Tournament(
+                tr[0],
+                tr[1],
+                tr[2],
+                tr[3],
+                tr[4],
+                tr[5],
+                tr[6],
+                tr[7],
+                tr[8],
+            )
 
     async def get_tournament_by_name(
         self,
@@ -168,7 +180,17 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
+            return Tournament(
+                tr[0],
+                tr[1],
+                tr[2],
+                tr[3],
+                tr[4],
+                tr[5],
+                tr[6],
+                tr[7],
+                tr[8],
+            )
 
     async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
         db = await asyncpg.connect(config.postgres)
@@ -177,7 +199,17 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournaments: list[Tournament] = []
         for tr in records:
             tournaments.append(
-                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
+                Tournament(
+                    tr[0],
+                    tr[1],
+                    tr[2],
+                    tr[3],
+                    tr[4],
+                    tr[5],
+                    tr[6],
+                    tr[7],
+                    tr[8],
+                )
             )
         return tournaments
 
@@ -188,7 +220,17 @@ class DatabaseCog(commands.Cog, name="Database"):
         tournaments: list[Tournament] = []
         for tr in records:
             tournaments.append(
-                Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
+                Tournament(
+                    tr[0],
+                    tr[1],
+                    tr[2],
+                    tr[3],
+                    tr[4],
+                    tr[5],
+                    tr[6],
+                    tr[7],
+                    tr[8],
+                )
             )
         return tournaments
 
@@ -200,12 +242,22 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
         if tr is not None:
-            return Tournament(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5], tr[6], tr[7])
+            return Tournament(
+                tr[0],
+                tr[1],
+                tr[2],
+                tr[3],
+                tr[4],
+                tr[5],
+                tr[6],
+                tr[7],
+                tr[8],
+            )
 
     async def update_tournament(self, tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomOverviewPage=$8 WHERE id=$1",
+            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomOverviewPage=$8, updatesChannel=$9 WHERE id=$1",
             tournament.id,
             tournament.name,
             tournament.channel,
@@ -214,6 +266,7 @@ class DatabaseCog(commands.Cog, name="Database"):
             tournament.running,
             tournament.isfandom,
             tournament.fandomOverviewPage,
+            tournament.updatesChannel,
         )
         await db.close()
 

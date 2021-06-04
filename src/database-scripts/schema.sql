@@ -21,6 +21,7 @@ CREATE TABLE tournaments (
     running INTEGER NOT NULL,
     isfandom BOOLEAN NOT NULL,
     fandomOverviewPage TEXT,
+    updatesChannel bigint,
     PRIMARY KEY(id),
     UNIQUE(name, guild)
 );
