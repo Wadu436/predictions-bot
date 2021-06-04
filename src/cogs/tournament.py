@@ -952,6 +952,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     if um.team == match.result:
                         user = await db_cog.get_user(um.user_id)
                         team_winners.append(user.name)
+                team_winners.sort()
 
                 msg = f"**Match {match.id} ({match.name}) has ended!**"
 
@@ -970,6 +971,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                         if um.games == match.games:
                             user = await db_cog.get_user(um.user_id)
                             game_winners.append(user.name)
+                    game_winners.sort()
 
                     if len(game_winners) == 0:
                         msg += "\n**Noone** predicted the correct amount of games."
