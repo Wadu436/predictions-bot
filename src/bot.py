@@ -6,7 +6,12 @@ import discord
 from discord.ext import commands
 
 import config
-from src.converters import EmojiNotFound, EmojiNotInGuild, TeamDoesntExist, TeamExist
+from src.utils.converters import (
+    EmojiNotFound,
+    EmojiNotInGuild,
+    TeamDoesntExist,
+    TeamExist,
+)
 
 PREFIX = "+"
 
@@ -15,7 +20,7 @@ def get_prefix(bot, message):
     return PREFIX
 
 
-initial_extensions = ["database", "team", "tournament"]  # "team", "tournament",
+initial_extensions = ["team", "tournament"]  # "team", "tournament",
 
 intents = discord.Intents.default()
 

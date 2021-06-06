@@ -3,7 +3,7 @@ import re
 from discord.ext import commands
 from emojis import emojis
 
-from src.cogs.database import DatabaseCog
+from src.utils.database import Database
 
 
 class EmojiNotFound(commands.BadArgument):
@@ -57,9 +57,7 @@ class CodeConverter(commands.Converter):
     async def convert(self, ctx, argument):
         code = argument.strip().lower()
 
-        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
-
-        code_exists = (await db_cog.get_team(code, ctx.guild.id)) is not None
+        code_exists = (await Database.get_team(code, ctx.guild.id)) is not None
         if code_exists != self.exist:
             if self.exist:
                 raise TeamDoesntExist(code)

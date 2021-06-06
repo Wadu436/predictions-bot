@@ -1,11 +1,9 @@
 import math
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 import asyncpg
-from discord.ext import commands
 
 import config
 
@@ -70,14 +68,10 @@ class UserMatch:
     games: int
 
 
-class DatabaseCog(commands.Cog, name="Database"):
-    db_path: Path
-
-    def __init__(self, bot):
-        self.bot = bot
-
+class Database:
     # Team-related queries
-    async def insert_team(self, team: Team) -> None:
+    @staticmethod
+    async def insert_team(team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "INSERT INTO teams VALUES ($1, $2, $3, $4, $5, $6);",
@@ -90,7 +84,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def get_team(self, code: str, guild: int) -> Optional[Team]:
+    @staticmethod
+    async def get_team(code: str, guild: int) -> Optional[Team]:
         db = await asyncpg.connect(config.postgres)
         tr = await db.fetchrow(
             "SELECT * FROM teams WHERE code=$1 AND guild=$2",
@@ -101,7 +96,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         if tr is not None:
             return Team(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
 
-    async def get_teams_by_guild(self, guild: int) -> list[Team]:
+    @staticmethod
+    async def get_teams_by_guild(guild: int) -> list[Team]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch("SELECT * FROM teams WHERE guild=$1", guild)
         teams: list[Team] = []
@@ -110,7 +106,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         await db.close()
         return teams
 
-    async def update_team(self, original_code, team: Team) -> None:
+    @staticmethod
+    async def update_team(original_code, team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, fandomOverviewPage=$7 WHERE code=$4 AND guild=$5;",
@@ -124,7 +121,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def delete_team(self, team: Team) -> None:
+    @staticmethod
+    async def delete_team(team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "DELETE FROM teams WHERE code=$1 AND guild=$2;",
@@ -134,7 +132,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         await db.close()
 
     # Tournament-related queries
-    async def insert_tournament(self, tournament: Tournament) -> None:
+    @staticmethod
+    async def insert_tournament(tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "INSERT INTO tournaments VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);",
@@ -150,7 +149,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def get_tournament(self, id: uuid.UUID) -> Optional[Tournament]:
+    @staticmethod
+    async def get_tournament(id: uuid.UUID) -> Optional[Tournament]:
         db = await asyncpg.connect(config.postgres)
         tr = await db.fetchrow("SELECT * FROM tournaments WHERE id=$1", id)
         await db.close()
@@ -167,11 +167,8 @@ class DatabaseCog(commands.Cog, name="Database"):
                 tr[8],
             )
 
-    async def get_tournament_by_name(
-        self,
-        name: str,
-        guild: int,
-    ) -> Optional[Tournament]:
+    @staticmethod
+    async def get_tournament_by_name(name: str, guild: int) -> Optional[Tournament]:
         db = await asyncpg.connect(config.postgres)
         tr = await db.fetchrow(
             "SELECT * FROM tournaments WHERE name=$1 AND guild=$2;",
@@ -192,7 +189,8 @@ class DatabaseCog(commands.Cog, name="Database"):
                 tr[8],
             )
 
-    async def get_tournaments_by_channel(self, channel: int) -> list[Tournament]:
+    @staticmethod
+    async def get_tournaments_by_channel(channel: int) -> list[Tournament]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch("SELECT * FROM tournaments WHERE channel=$1;", channel)
         await db.close()
@@ -209,11 +207,12 @@ class DatabaseCog(commands.Cog, name="Database"):
                     tr[6],
                     tr[7],
                     tr[8],
-                )
+                ),
             )
         return tournaments
 
-    async def get_tournaments_by_guild(self, guild: int) -> list[Tournament]:
+    @staticmethod
+    async def get_tournaments_by_guild(guild: int) -> list[Tournament]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch("SELECT * FROM tournaments WHERE guild=$1;", guild)
         await db.close()
@@ -230,11 +229,12 @@ class DatabaseCog(commands.Cog, name="Database"):
                     tr[6],
                     tr[7],
                     tr[8],
-                )
+                ),
             )
         return tournaments
 
-    async def get_running_tournament(self, channel: int) -> Optional[Tournament]:
+    @staticmethod
+    async def get_running_tournament(channel: int) -> Optional[Tournament]:
         db = await asyncpg.connect(config.postgres)
         tr = await db.fetchrow(
             "SELECT * FROM tournaments WHERE channel=$1 AND running=1;",
@@ -254,7 +254,8 @@ class DatabaseCog(commands.Cog, name="Database"):
                 tr[8],
             )
 
-    async def update_tournament(self, tournament: Tournament) -> None:
+    @staticmethod
+    async def update_tournament(tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomOverviewPage=$8, updatesChannel=$9 WHERE id=$1",
@@ -270,13 +271,15 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def delete_tournament(self, tournament: Tournament) -> None:
+    @staticmethod
+    async def delete_tournament(tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute("DELETE FROM tournaments WHERE id=$1", tournament.id)
         await db.commit()
 
     # Match-related queries
-    async def insert_match(self, match: Match) -> None:
+    @staticmethod
+    async def insert_match(match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "INSERT INTO matches VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);",
@@ -295,7 +298,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def get_match(self, id: int, tournament: uuid.UUID) -> Optional[Match]:
+    @staticmethod
+    async def get_match(id: int, tournament: uuid.UUID) -> Optional[Match]:
         db = await asyncpg.connect(config.postgres)
         mr = await db.fetchrow(
             "SELECT * FROM matches WHERE id=$1 AND tournament=$2",
@@ -319,7 +323,8 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[11],
             )
 
-    async def get_match_by_message(self, message: int) -> Optional[Match]:
+    @staticmethod
+    async def get_match_by_message(message: int) -> Optional[Match]:
         db = await asyncpg.connect(config.postgres)
         mr = await db.fetchrow("SELECT * FROM matches WHERE message=$1", message)
         await db.close()
@@ -339,10 +344,8 @@ class DatabaseCog(commands.Cog, name="Database"):
                 mr[11],
             )
 
-    async def get_matches_by_tournament(
-        self,
-        tournament: uuid.UUID,
-    ) -> list[Match]:
+    @staticmethod
+    async def get_matches_by_tournament(tournament: uuid.UUID) -> list[Match]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch(
             "SELECT * FROM matches WHERE tournament=$1",
@@ -369,10 +372,8 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
         return matches
 
-    async def get_matches_by_team(
-        self,
-        team: Team,
-    ) -> list[Match]:
+    @staticmethod
+    async def get_matches_by_team(team: Team) -> list[Match]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch(
             "SELECT * FROM matches WHERE (team1 = $1 OR team2 = $1) AND guild = $2;",
@@ -400,11 +401,8 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
         return matches
 
-    async def get_matches_by_state(
-        self,
-        tournament: uuid.UUID,
-        running: int,
-    ) -> list[Match]:
+    @staticmethod
+    async def get_matches_by_state(tournament: uuid.UUID, running: int) -> list[Match]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch(
             "SELECT * FROM matches WHERE tournament=$1 AND running=$2",
@@ -432,7 +430,8 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
         return matches
 
-    async def update_match(self, match: Match) -> None:
+    @staticmethod
+    async def update_match(match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9, fandomMatchId=$12 WHERE id=$10 AND tournament=$11;",
@@ -451,7 +450,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def delete_match(self, match: Match) -> None:
+    @staticmethod
+    async def delete_match(match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "DELETE FROM matches WHERE name=$1 AND tournament=$2;",
@@ -461,7 +461,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         await db.close()
 
     # User-related queries
-    async def insert_user(self, user: User) -> None:
+    @staticmethod
+    async def insert_user(user: User) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "INSERT INTO users VALUES ($1, $2);",
@@ -470,25 +471,29 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def get_user(self, id: int) -> Optional[User]:
+    @staticmethod
+    async def get_user(id: int) -> Optional[User]:
         db = await asyncpg.connect(config.postgres)
         ur = await db.fetchrow("SELECT * FROM users WHERE id=$1", id)
         await db.close()
         if ur is not None:
             return User(ur[0], ur[1])
 
-    async def update_user(self, user: User) -> None:
+    @staticmethod
+    async def update_user(user: User) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute("UPDATE users SET name=$1 WHERE id=$2;", user.name, user.id)
         await db.close()
 
-    async def delete_user(self, user: User) -> None:
+    @staticmethod
+    async def delete_user(user: User) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute("DELETE FROM users WHERE id=$1;", user.id)
         await db.close()
 
     # UserMatch-related queries
-    async def insert_usermatch(self, usermatch: UserMatch):
+    @staticmethod
+    async def insert_usermatch(usermatch: UserMatch):
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "INSERT INTO users_matches VALUES ($1, $2, $3, $4, $5);",
@@ -500,8 +505,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
+    @staticmethod
     async def get_usermatch(
-        self,
         user_id: int,
         match_id: int,
         match_tournament: uuid.UUID,
@@ -517,8 +522,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         if umr is not None:
             return UserMatch(umr[0], umr[1], umr[2], umr[3], umr[4])
 
+    @staticmethod
     async def get_usermatch_by_match(
-        self,
         match_id: str,
         match_tournament: uuid.UUID,
     ) -> list[UserMatch]:
@@ -536,7 +541,8 @@ class DatabaseCog(commands.Cog, name="Database"):
             )
         return usermatches
 
-    async def update_usermatch(self, usermatch: UserMatch) -> None:
+    @staticmethod
+    async def update_usermatch(usermatch: UserMatch) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "UPDATE users_matches SET team=$1, games=$2 WHERE user_id=$3, match_id=$4, match_tournament=$5;",
@@ -548,7 +554,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
-    async def delete_usermatch(self, usermatch: UserMatch) -> None:
+    @staticmethod
+    async def delete_usermatch(usermatch: UserMatch) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
             "DELETE FROM users_matches WHERE user_id=$1, match_id=$2, match_tournament=$3;",
@@ -558,8 +565,8 @@ class DatabaseCog(commands.Cog, name="Database"):
         )
         await db.close()
 
+    @staticmethod
     async def get_leaderboard(
-        self,
         tournament: uuid.UUID,
         scoring_table: dict[str, int],
     ) -> list[tuple[str, int]]:
@@ -577,14 +584,11 @@ class DatabaseCog(commands.Cog, name="Database"):
         leaderboard = [list(record) for record in records]
         return leaderboard
 
-    async def get_num_matches(self, tournament: uuid.UUID):
+    @staticmethod
+    async def get_num_matches(tournament: uuid.UUID):
         db = await asyncpg.connect(config.postgres)
         row = await db.fetchrow(
             "SELECT COUNT(*) FROM matches WHERE tournament=$1",
             tournament,
         )
         return int(row[0])
-
-
-def setup(bot):
-    bot.add_cog(DatabaseCog(bot))

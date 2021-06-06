@@ -3,10 +3,10 @@ from typing import Optional
 import discord
 from discord.ext import commands
 
-from src import decorators
-from src.cogs.database import DatabaseCog, Match, Team
 from src.cogs.tournament import TournamentCog
-from src.converters import CodeConverter, EmojiConverter
+from src.utils import decorators
+from src.utils.converters import CodeConverter, EmojiConverter
+from src.utils.database import Database, Match, Team
 
 
 class EditException(Exception):
@@ -62,10 +62,9 @@ class TeamsCog(commands.Cog, name="Teams"):
         *,
         name: str,
     ):
-        db_cog: DatabaseCog = self.bot.get_cog("Database")
         tr_cog: TournamentCog = self.bot.get_cog("Tournament")
 
-        team: Team = await db_cog.get_team(code, ctx.guild.id)
+        team: Team = await Database.get_team(code, ctx.guild.id)
 
         if name == team.name:
             raise EditException(
@@ -76,11 +75,11 @@ class TeamsCog(commands.Cog, name="Teams"):
         original_name = team.name
         team.name = name
 
-        await db_cog.update_team(code, team)
+        await Database.update_team(code, team)
 
         if tr_cog is not None:
             # Update matches
-            to_update: list[Match] = await db_cog.get_matches_by_team(team)
+            to_update: list[Match] = await Database.get_matches_by_team(team)
             for match in to_update:
                 await tr_cog.update_match_message(match)
 
@@ -101,9 +100,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         old_code: CodeConverter(True),
         new_code: CodeConverter(False),
     ):
-        db_cog: DatabaseCog = self.bot.get_cog("Database")
-
-        team: Team = await db_cog.get_team(old_code, ctx.guild.id)
+        team: Team = await Database.get_team(old_code, ctx.guild.id)
 
         if new_code == old_code:
             raise EditException(
@@ -113,7 +110,7 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         team.code = new_code
 
-        await db_cog.update_team(old_code, team)
+        await Database.update_team(old_code, team)
 
         await ctx.send(f'Changed code:\n "{old_code}" => "{new_code}"')
 
@@ -132,11 +129,8 @@ class TeamsCog(commands.Cog, name="Teams"):
         code: CodeConverter(True),
         emoji: EmojiConverter,
     ):
-        # TODO: only edit code if there are no running games with this team
-        db_cog: DatabaseCog = self.bot.get_cog("Database")
-
-        team: Team = await db_cog.get_team(code, ctx.guild.id)
-        matches: list[Match] = await db_cog.get_matches_by_team(team)
+        team: Team = await Database.get_team(code, ctx.guild.id)
+        matches: list[Match] = await Database.get_matches_by_team(team)
 
         if len(matches) > 0:
             raise EditException(
@@ -153,7 +147,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         old_emoji = team.emoji
         team.emoji = emoji
 
-        await db_cog.update_team(code, team)
+        await Database.update_team(code, team)
         await ctx.send(f"Changed emoji:\n {old_emoji} => {emoji}")
 
     @team_group.command(
@@ -173,8 +167,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         code: CodeConverter(False),
         emoji: EmojiConverter,
     ):
-        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
-        await db_cog.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
+        await Database.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
         await ctx.send(f"Added team `{code}`")
 
     @team_group.command(
@@ -187,11 +180,9 @@ class TeamsCog(commands.Cog, name="Teams"):
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
     async def team_remove(self, ctx, code: CodeConverter(True)):
-        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
-
-        team: Optional[Team] = await db_cog.get_team(code, ctx.guild.id)
+        team: Optional[Team] = await Database.get_team(code, ctx.guild.id)
         if team is not None:
-            await db_cog.delete_team(team)
+            await Database.delete_team(team)
 
         await ctx.send(f"Deleted team {team.name}.")
 
@@ -204,9 +195,7 @@ class TeamsCog(commands.Cog, name="Teams"):
     )
     @commands.guild_only()
     async def team_list(self, ctx):
-        db_cog: DatabaseCog = ctx.bot.get_cog("Database")
-
-        teams = await db_cog.get_teams_by_guild(ctx.guild.id)
+        teams = await Database.get_teams_by_guild(ctx.guild.id)
 
         if not (len(teams) > 0):
             await ctx.send("`No teams found.`")
