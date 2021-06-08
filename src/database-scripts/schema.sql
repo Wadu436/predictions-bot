@@ -4,7 +4,7 @@ CREATE TABLE teams (
     emoji TEXT NOT NULL,
     guild bigint NOT NULL,
     isfandom BOOLEAN NOT NULL,
-    fandomOverviewPage TEXT,
+    fandomName TEXT,
     PRIMARY KEY(code, guild)
 );
 CREATE TABLE users (
