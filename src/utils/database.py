@@ -17,11 +17,19 @@ class Team:
     isfandom: bool = False
     fandomName: str = None
 
+    @staticmethod
+    def from_row(r):
+        return Team(r[0], r[1], r[2], r[3], r[4], r[5])
+
 
 @dataclass
 class User:
     id: int
     name: str
+
+    @staticmethod
+    def from_row(r):
+        return User(r[0], r[1])
 
 
 @dataclass
@@ -35,6 +43,10 @@ class Tournament:
     isfandom: bool = False
     fandomOverviewPage: str = None
     updatesChannel: int = None
+
+    @staticmethod
+    def from_row(r):
+        return Tournament(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
 
 
 @dataclass
@@ -58,6 +70,23 @@ class Match:
     lose_games: int = field(init=False)
     fandomMatchId: str = None
 
+    @staticmethod
+    def from_row(r):
+        return Match(
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            r[4],
+            r[5],
+            r[6],
+            r[7],
+            r[8],
+            r[9],
+            r[10],
+            r[11],
+        )
+
 
 @dataclass
 class UserMatch:
@@ -66,6 +95,10 @@ class UserMatch:
     match_tournament: uuid.UUID
     team: int
     games: int
+
+    @staticmethod
+    def from_row(r):
+        return UserMatch(r[0], r[1], r[2], r[3], r[4])
 
 
 class Database:
@@ -80,7 +113,7 @@ class Database:
             team.emoji,
             team.guild,
             team.isfandom,
-            team.fandomOverviewPage,
+            team.fandomName,
         )
         await db.close()
 
@@ -94,7 +127,7 @@ class Database:
         )
         await db.close()
         if tr is not None:
-            return Team(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5])
+            return Team.from_row(tr)
 
     @staticmethod
     async def get_teams_by_guild(guild: int) -> list[Team]:
@@ -102,7 +135,7 @@ class Database:
         records = await db.fetch("SELECT * FROM teams WHERE guild=$1", guild)
         teams: list[Team] = []
         for tr in records:
-            teams.append(Team(tr[0], tr[1], tr[2], tr[3], tr[4], tr[5]))
+            teams.append(Team.from_row(tr))
         await db.close()
         return teams
 
@@ -155,17 +188,7 @@ class Database:
         tr = await db.fetchrow("SELECT * FROM tournaments WHERE id=$1", id)
         await db.close()
         if tr is not None:
-            return Tournament(
-                tr[0],
-                tr[1],
-                tr[2],
-                tr[3],
-                tr[4],
-                tr[5],
-                tr[6],
-                tr[7],
-                tr[8],
-            )
+            return Tournament.from_row(tr)
 
     @staticmethod
     async def get_tournament_by_name(name: str, guild: int) -> Optional[Tournament]:
@@ -177,17 +200,7 @@ class Database:
         )
         await db.close()
         if tr is not None:
-            return Tournament(
-                tr[0],
-                tr[1],
-                tr[2],
-                tr[3],
-                tr[4],
-                tr[5],
-                tr[6],
-                tr[7],
-                tr[8],
-            )
+            return Tournament.from_row(tr)
 
     @staticmethod
     async def get_tournaments_by_channel(channel: int) -> list[Tournament]:
@@ -196,19 +209,7 @@ class Database:
         await db.close()
         tournaments: list[Tournament] = []
         for tr in records:
-            tournaments.append(
-                Tournament(
-                    tr[0],
-                    tr[1],
-                    tr[2],
-                    tr[3],
-                    tr[4],
-                    tr[5],
-                    tr[6],
-                    tr[7],
-                    tr[8],
-                ),
-            )
+            tournaments.append(Tournament.from_row(tr))
         return tournaments
 
     @staticmethod
@@ -218,19 +219,7 @@ class Database:
         await db.close()
         tournaments: list[Tournament] = []
         for tr in records:
-            tournaments.append(
-                Tournament(
-                    tr[0],
-                    tr[1],
-                    tr[2],
-                    tr[3],
-                    tr[4],
-                    tr[5],
-                    tr[6],
-                    tr[7],
-                    tr[8],
-                ),
-            )
+            tournaments.append(Tournament.from_row(tr))
         return tournaments
 
     @staticmethod
@@ -242,17 +231,7 @@ class Database:
         )
         await db.close()
         if tr is not None:
-            return Tournament(
-                tr[0],
-                tr[1],
-                tr[2],
-                tr[3],
-                tr[4],
-                tr[5],
-                tr[6],
-                tr[7],
-                tr[8],
-            )
+            return Tournament.from_row(tr)
 
     @staticmethod
     async def update_tournament(tournament: Tournament) -> None:
@@ -308,20 +287,7 @@ class Database:
         )
         await db.close()
         if mr is not None:
-            return Match(
-                mr[0],
-                mr[1],
-                mr[2],
-                mr[3],
-                mr[4],
-                mr[5],
-                mr[6],
-                mr[7],
-                mr[8],
-                mr[9],
-                mr[10],
-                mr[11],
-            )
+            return Match.from_row(mr)
 
     @staticmethod
     async def get_match_by_message(message: int) -> Optional[Match]:
@@ -329,20 +295,7 @@ class Database:
         mr = await db.fetchrow("SELECT * FROM matches WHERE message=$1", message)
         await db.close()
         if mr is not None:
-            return Match(
-                mr[0],
-                mr[1],
-                mr[2],
-                mr[3],
-                mr[4],
-                mr[5],
-                mr[6],
-                mr[7],
-                mr[8],
-                mr[9],
-                mr[10],
-                mr[11],
-            )
+            return Match.from_row(mr)
 
     @staticmethod
     async def get_matches_by_tournament(tournament: uuid.UUID) -> list[Match]:
@@ -354,22 +307,7 @@ class Database:
         await db.close()
         matches: list[Match] = []
         for mr in records:
-            matches.append(
-                Match(
-                    mr[0],
-                    mr[1],
-                    mr[2],
-                    mr[3],
-                    mr[4],
-                    mr[5],
-                    mr[6],
-                    mr[7],
-                    mr[8],
-                    mr[9],
-                    mr[10],
-                    mr[11],
-                ),
-            )
+            matches.append(Match.from_row(mr))
         return matches
 
     @staticmethod
@@ -383,22 +321,7 @@ class Database:
         await db.close()
         matches: list[Match] = []
         for mr in records:
-            matches.append(
-                Match(
-                    mr[0],
-                    mr[1],
-                    mr[2],
-                    mr[3],
-                    mr[4],
-                    mr[5],
-                    mr[6],
-                    mr[7],
-                    mr[8],
-                    mr[9],
-                    mr[10],
-                    mr[11],
-                ),
-            )
+            matches.append(Match.from_row(mr))
         return matches
 
     @staticmethod
@@ -412,22 +335,7 @@ class Database:
         await db.close()
         matches: list[Match] = []
         for mr in records:
-            matches.append(
-                Match(
-                    mr[0],
-                    mr[1],
-                    mr[2],
-                    mr[3],
-                    mr[4],
-                    mr[5],
-                    mr[6],
-                    mr[7],
-                    mr[8],
-                    mr[9],
-                    mr[10],
-                    mr[11],
-                ),
-            )
+            matches.append(Match.from_row(mr))
         return matches
 
     @staticmethod
@@ -477,7 +385,7 @@ class Database:
         ur = await db.fetchrow("SELECT * FROM users WHERE id=$1", id)
         await db.close()
         if ur is not None:
-            return User(ur[0], ur[1])
+            return User.from_row(ur)
 
     @staticmethod
     async def update_user(user: User) -> None:
@@ -520,7 +428,7 @@ class Database:
         )
         await db.close()
         if umr is not None:
-            return UserMatch(umr[0], umr[1], umr[2], umr[3], umr[4])
+            return UserMatch.from_row(umr)
 
     @staticmethod
     async def get_usermatch_by_match(
@@ -536,9 +444,7 @@ class Database:
         await db.close()
         usermatches: list[UserMatch] = []
         for umr in records:
-            usermatches.append(
-                UserMatch(umr[0], umr[1], umr[2], umr[3], umr[4]),
-            )
+            usermatches.append(UserMatch.from_row(umr))
         return usermatches
 
     @staticmethod
