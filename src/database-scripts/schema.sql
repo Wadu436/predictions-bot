@@ -1,7 +1,7 @@
 CREATE TABLE teams (
     name TEXT NOT NULL,
     code TEXT NOT NULL,
-    emoji TEXT NOT NULL,
+    emoji BIGINT NOT NULL,
     guild bigint NOT NULL,
     isfandom BOOLEAN NOT NULL,
     fandomOverviewPage TEXT,
