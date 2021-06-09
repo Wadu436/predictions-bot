@@ -164,14 +164,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
         for reaction in reactions:
             users = await reaction.users().flatten()
             if reaction.custom_emoji and (reaction.emoji.id in team_emojis):
-                team = team_emojis.index(str(reaction)) + 1
+                team = team_emojis.index(reaction.emoji.id) + 1
                 for user in users:
                     if user == self.bot.user:
                         continue
                     team_dict[user.id] = team
                     user_set.add(user)
-            if not reaction.custom_emoji and (reaction.emoji.id not in games_emojis):
-                games = games_emojis.index(str(reaction)) + math.ceil(match.bestof / 2)
+            if not reaction.custom_emoji and (reaction.emoji in games_emojis):
+                games = games_emojis.index(reaction.emoji) + math.ceil(match.bestof / 2)
                 for user in users:
                     if user == self.bot.user:
                         continue
@@ -984,7 +984,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 game_choice = 0
 
             for r in message.reactions:
-                if r.emoji.id in [team1.emoji, team2.emoji]:
+                if r.custom_emoji and r.emoji.id in [team1.emoji, team2.emoji]:
                     react_user = await r.users().get(id=payload.user_id)
                     if react_user is not None:
                         if team_choice == 0:
@@ -994,7 +994,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                                 team_choice = 2  # team 2
                         else:
                             team_choice = -1  # two teams selected -> invalid
-                if str(r.emoji) in games_emojis:
+                if not r.custom_emoji and str(r.emoji) in games_emojis:
                     react_user = await r.users().get(id=payload.user_id)
                     if react_user is not None:
                         if game_choice == 0:
