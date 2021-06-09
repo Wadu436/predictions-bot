@@ -1,4 +1,6 @@
+import asyncio
 import math
+import re
 import uuid
 from os import error
 from typing import Optional
@@ -7,6 +9,8 @@ import discord
 from discord import team
 from discord.ext import commands
 
+from src.aiomediawiki.aiomediawiki import APIException, leaguepedia
+from src.aiomediawiki.tables.teams import TeamsRow
 from src.utils import decorators
 from src.utils.converters import BestOfXConverter, CodeConverter
 from src.utils.database import Database, Match, Team, Tournament, User, UserMatch
@@ -94,11 +98,55 @@ class TournamentCog(commands.Cog, name="Tournament"):
         "bo5_games": 1,
     }
     dialogs: dict[int, int] = {}  # (dialog message, match message)
+    # http:// or https://
+    link_validation_regex = re.compile(r"^(?:http)s?://", re.IGNORECASE)
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     # ----------------------------- UTILITY ----------------------------
+
+    async def update_fandom_teams(self, tournament_overviewpage: str, guild_id: int):
+        teams = await leaguepedia.get_teams(tournament_overviewpage)
+        team_images = []
+        guild: discord.Guild = self.bot.get_guild(guild_id)
+        guild_teams = await Database.get_teams_by_guild(guild_id)
+
+        teams_to_create: list[TeamsRow] = []
+
+        # Figure out which teams we need to add
+        for team in teams:
+            t = discord.utils.get(guild_teams, code=team.short.lower())
+            if t is None:
+                teams_to_create.append(team)
+            elif not t.isfandom:
+                # Take control of teams with the correct name already
+                t.fandomOverviewPage = team.overviewPage
+                t.isfandom = True
+                await Database.update_team(t.code, t)
+
+        async def add_team(team: TeamsRow):
+            # page_info = await leaguepedia.get_page_info(team.overviewPage, ["images"])
+            team_image = f"{team.overviewPage}logo square.png"
+            img = await leaguepedia.get_file(team_image, size=256)
+            emoji = await guild.create_custom_emoji(name=team.short.lower(), image=img)
+            await Database.insert_team(
+                Team(
+                    team.name,
+                    team.short.lower(),
+                    str(emoji),
+                    guild_id,
+                    True,
+                    team.overviewPage,
+                )
+            )
+            return
+
+        coro_list = [add_team(t) for t in teams_to_create]
+        for coro in coro_list:
+            await coro
+        # for f in asyncio.as_completed():
+        #    await f
 
     async def save_votes(self, match: Match, tournament: Tournament) -> bool:
         channel = self.bot.get_channel(tournament.channel)
@@ -233,10 +281,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
             teams[team.code] = team
 
         # Header
+        content_header = f"**{tournament.name}**"
+        if tournament.isfandom:
+            content_header += f" ({leaguepedia.wiki_url}{tournament.fandomOverviewPage.replace(' ', '_')})"
         if tournament.running == 0:
-            content_header = f"**{tournament.name}** - Ended\n\n"
-        else:
-            content_header = f"**{tournament.name}**\n\n"
+            content_header += f" - Ended"
+        content_header += "\n\n"
 
         # Scoring table
         content_scoring_table = f"***Scoring Table***\n```Correct team - BO1: {self.score_table['bo1_team']}\nCorrect team - BO3: {self.score_table['bo3_team']}\tCorrect number of games - BO3: {self.score_table['bo3_games']}\nCorrect team - BO5: {self.score_table['bo5_team']}\tCorrect number of games - BO5: {self.score_table['bo5_games']}```\n"
@@ -349,36 +399,101 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @tournament_group.command(
         name="start",
         brief="Starts a tournament.",
-        description="Starts a tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
+        description="Starts a tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.\n-Tournament link should be a link to the overview page on Leaguepedia",
         aliases=["s"],
         usage="<tournament name>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def tournament_start(self, ctx: commands.Context, *, name: str):
+    async def tournament_start(self, ctx: commands.Context, *, name_or_link: str):
         tournament = await Database.get_running_tournament(ctx.channel.id)
-
         # Check if tournament already running
         if tournament is not None:
             raise TournamentAlreadyRunning(tournament)
 
-        # Check if other tournament of same name already exists
-        tournament = await Database.get_tournament_by_name(name, ctx.guild.id)
-        if tournament is not None:
-            raise TournamentAlreadyExists(tournament)
+        # Check if argument is a name or a link
+        is_link = re.match(self.link_validation_regex, name_or_link) is not None
 
-        message = await ctx.send("Tournament is starting...")
+        tournament_name = name_or_link
+        if is_link:
+            # Extra checks for leaguepedia tournament
+            # Check if link is a leaguepedia link
+            link = name_or_link
+            if not link.startswith(leaguepedia.wiki_url):
+                await ctx.send("That is not a Leaguepedia link.")
+                return
+            try:
+                page_info = await leaguepedia.get_page_info(
+                    link.removeprefix(leaguepedia.wiki_url)
+                )
+            except APIException as e:
+                if e.code == "pagecannotexist":
+                    await ctx.send("This is not a regular page.")
+                if e.code == "missingtitle":
+                    await ctx.send("This page doesn't exist.")
+                return
+            page_title = page_info["title"]
 
-        try:
-            tournament = Tournament(
-                uuid.uuid4(), name.strip(), ctx.channel.id, ctx.guild.id, message.id, 1
+            fandomTournament = await leaguepedia.get_tournament(page_title)
+            if not fandomTournament:
+                await ctx.send(f"This is not a tournament overview page.")
+                return
+
+            tournament_name = fandomTournament.name
+
+        # We have verified the tournament can be started
+        async with ctx.typing():
+            if is_link:
+                message: discord.Message = await ctx.send("Adding teams...")
+
+                await self.update_fandom_teams(
+                    fandomTournament.overviewPage,
+                    ctx.guild.id,
+                )
+
+                await message.edit(content="Tournament is starting...")
+            else:
+                message: discord.Message = await ctx.send("Tournament is starting...")
+
+            # Check if tournament by this name already exists
+            # If yes, add a number behind it
+            base_name = tournament_name
+            i = 1
+            tournament = await Database.get_tournament_by_name(
+                tournament_name,
+                ctx.guild.id,
             )
-            await Database.insert_tournament(tournament)
-        except Exception as e:
-            await message.delete()
-            raise e
-        await self.update_tournament_message(tournament)
-        await ctx.message.delete()
+            while tournament:
+                tournament_name = base_name + f" ({i})"
+                i += 1
+                tournament = await Database.get_tournament_by_name(
+                    tournament_name,
+                    ctx.guild.id,
+                )
+
+            tournament = Tournament(
+                uuid.uuid4(),
+                tournament_name,
+                ctx.channel.id,
+                ctx.guild.id,
+                message.id,
+                1,
+            )
+
+            if is_link:
+                tournament.isfandom = True
+                tournament.fandomOverviewPage = fandomTournament.overviewPage
+
+            try:
+                await Database.insert_tournament(tournament)
+            except Exception as e:
+                await message.delete()
+                raise e
+            await self.update_tournament_message(tournament)
+            await ctx.message.delete()
+
+            if tournament.isfandom:
+                pass  # TODO: start adding matches
 
     @tournament_group.command(
         name="end",
