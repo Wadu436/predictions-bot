@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,7 +9,7 @@ from src.aiomediawiki.tables.matchschedule import MatchScheduleRow
 from src.aiomediawiki.tables.teams import TeamsRow
 from src.aiomediawiki.tables.tournaments import TournamentsRow
 
-leaguepedia_endpoint = "https://lol.fandom.com/api.php"
+leaguepedia_site = "https://lol.fandom.com"
 
 
 class ServerException(Exception):
@@ -34,11 +35,29 @@ def _construct_url(api_endpoint, **kwargs):
 
 
 class Site:
-    api_endpoint: str
+    site: str
+    api_path: str
+    wiki_path: str
     limit: int
 
-    def __init__(self, api_endpoint: str, limit: int = 500):
-        self.api_endpoint = api_endpoint
+    @property
+    def api_url(self):
+        return self.site + self.api_path
+
+    @property
+    def wiki_url(self):
+        return self.site + self.wiki_path
+
+    def __init__(
+        self,
+        site: str,
+        api_path: str = "/api.php",
+        wiki_path: str = "/wiki/",
+        limit: int = 500,
+    ):
+        self.site = site
+        self.api_path = api_path
+        self.wiki_path = wiki_path
         self.limit = limit
 
     async def cargo_query(
@@ -71,23 +90,24 @@ class Site:
 
         while len(results) % self.limit == 0:
             kwargs["offset"] = len(results)
-            query_url = _construct_url(self.api_endpoint, **kwargs)
+            query_url = _construct_url(self.api_url, **kwargs)
             async with aiohttp.ClientSession() as session:
                 async with session.get(query_url) as response:
                     if response.status != 200:
                         raise ServerException(
-                            f"HTTP Error. Status code: {response.status}."
+                            f"HTTP Error. Status code: {response.status}.",
                         )
                     if response.content_type != "application/json":
                         raise ServerException(
-                            "Response error. Website did not return json format."
+                            "Response error. Website did not return json format.",
                         )
                     response_json = await response.text()
 
             response_dict = json.loads(response_json)
             if "error" in response_dict:
                 raise APIException(
-                    response_dict["error"]["code"], response_dict["error"]["info"]
+                    response_dict["error"]["code"],
+                    response_dict["error"]["info"],
                 )
 
             new_results = [row["title"] for row in response_dict["cargoquery"]]
@@ -99,26 +119,52 @@ class Site:
 
         return results
 
-    async def parse_query(self, *, page: str, prop: str):
-        query_url = _construct_url(
-            self.api_endpoint, action="parse", page=page, prop=prop, format="json"
-        )
+    async def parse_query(
+        self,
+        *,
+        page: str = None,
+        title: str = None,
+        text: str = None,
+        prop: str,
+        **kwargs,
+    ):
+        if page:
+            query_url = _construct_url(
+                self.api_url,
+                action="parse",
+                page=page,
+                prop=prop,
+                format="json",
+                kwargs=kwargs,
+            )
+        else:
+            query_url = _construct_url(
+                self.api_url,
+                action="parse",
+                title=title,
+                text=text,
+                prop=prop,
+                format="json",
+                kwargs=kwargs,
+            )
+
         async with aiohttp.ClientSession() as session:
             async with session.get(query_url) as response:
                 if response.status != 200:
                     raise ServerException(
-                        f"HTTP Error. Status code: {response.status}."
+                        f"HTTP Error. Status code: {response.status}.",
                     )
                 if response.content_type != "application/json":
                     raise ServerException(
-                        "Response error. Website did not return json format."
+                        "Response error. Website did not return json format.",
                     )
                 response_json = await response.text()
 
         response_dict = json.loads(response_json)
         if "error" in response_dict:
             raise APIException(
-                response_dict["error"]["code"], response_dict["error"]["info"]
+                response_dict["error"]["code"],
+                response_dict["error"]["info"],
             )
 
         return response_dict["parse"]
@@ -126,10 +172,30 @@ class Site:
 
 class Leaguepedia(Site):
     def __init__(self):
-        super().__init__(leaguepedia_endpoint)
+        super().__init__(leaguepedia_site)
 
-    async def get_page_info(self, page: str, prop: list[str] = []):
-        """Returns requested properties on a page.
+    async def get_file(self, filename, size=None):
+        pattern = r".*src\=\"(.+?)\".*"
+        size = "|" + str(size) + "px" if size else ""
+        to_parse_text = f"[[File:{filename}|link={size}]]"
+        result = await self.parse_query(
+            title="Main Page",
+            text=to_parse_text,
+            disablelimitreport=1,
+            prop="text",
+        )
+        parse_result_text = result["text"]["*"]
+
+        url = re.match(pattern, parse_result_text)[1]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    img_bytes = await resp.read()
+                    return img_bytes
+
+    async def get_page_info(self, page: str, prop: list[str] = None):
+        """Return requested properties on a page.
+
         In addition to the requested properties, also always returns the title and pageid.
         The properties are returned in a dictionary.
 
@@ -137,7 +203,10 @@ class Leaguepedia(Site):
 
         Arguments:
         page -- The page (e.g. LCS/2021 Season/Summer Season)
-        prop -- A list of properties (default=[])"""
+        prop -- A list of properties (default=[])
+        """
+        if prop is None:
+            prop = []
         return await self.parse_query(page=page, prop="|".join(prop))
 
     async def get_tournament(self, overviewpage: str) -> Optional[TournamentsRow]:
@@ -185,6 +254,15 @@ class Leaguepedia(Site):
         if len(result) == 0:
             return None
         return TeamsRow.from_row(result[0])
+
+    async def get_teams(self, overviewpage: str) -> list[TeamsRow]:
+        result = await self.cargo_query(
+            tables=f"{TeamsRow.table}=T,TournamentRosters=TR",
+            fields=_fields_to_query({f"T.{v}" for v in TeamsRow.fields}),
+            where=f"TR.OverviewPage='{overviewpage}'",
+            join_on="T.OverviewPage=TR.Team",
+        )
+        return [TeamsRow.from_row(row) for row in result]
 
 
 leaguepedia = Leaguepedia()
