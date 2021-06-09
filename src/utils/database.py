@@ -143,7 +143,7 @@ class Database:
     async def update_team(original_code, team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            'UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, "fandomOverviewPage"=$7 WHERE code=$4 AND guild=$5;',
+            "UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, fandomoverviewpage=$7 WHERE code=$4 AND guild=$5;",
             team.name,
             team.code,
             team.emoji,
@@ -237,7 +237,7 @@ class Database:
     async def update_tournament(tournament: Tournament) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomOverviewPage=$8, updatesChannel=$9 WHERE id=$1",
+            "UPDATE tournaments SET name=$2, channel=$3, guild=$4, message=$5, running=$6, isfandom=$7, fandomoverviewpage=$8, updatesChannel=$9 WHERE id=$1",
             tournament.id,
             tournament.name,
             tournament.channel,
@@ -249,6 +249,29 @@ class Database:
             tournament.updatesChannel,
         )
         await db.close()
+
+    @staticmethod
+    async def get_running_fandom_tournaments(guild: int) -> list[Tournament]:
+        db = await asyncpg.connect(config.postgres)
+        records = await db.fetch(
+            "SELECT * FROM tournaments WHERE guild=$1 AND isfandom=TRUE AND running=1;",
+            guild,
+        )
+        await db.close()
+        tournaments: list[Tournament] = []
+        for tr in records:
+            tournaments.append(Tournament.from_row(tr))
+        return tournaments
+
+    @staticmethod
+    async def get_tournament_tabs(tournament_id: uuid.UUID) -> list[int]:
+        db = await asyncpg.connect(config.postgres)
+        tr = await db.fetchrow(
+            "SELECT DISTINCT fandomtab FROM matches WHERE fandomtab IS NOT NULL AND tournament=$1",
+            tournament_id,
+        )
+        await db.close()
+        return list(tr)
 
     @staticmethod
     async def delete_tournament(tournament: Tournament) -> None:
@@ -342,7 +365,7 @@ class Database:
     async def update_match(match: Match) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9, fandomMatchId=$12 WHERE id=$10 AND tournament=$11;",
+            "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9, fandommatchid=$12 WHERE id=$10 AND tournament=$11;",
             match.name,
             match.guild,
             match.message,
