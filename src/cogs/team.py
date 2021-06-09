@@ -5,7 +5,7 @@ from discord.ext import commands
 
 from src.cogs.tournament import TournamentCog
 from src.utils import decorators
-from src.utils.converters import CodeConverter, EmojiConverter
+from src.utils.converters import CodeConverter  # ,  EmojiConverter
 from src.utils.database import Database, Match, Team
 
 
@@ -127,7 +127,7 @@ class TeamsCog(commands.Cog, name="Teams"):
         self,
         ctx: commands.Context,
         code: CodeConverter(True),
-        emoji: EmojiConverter,
+        emoji: commands.converter.EmojiConverter,
     ):
         team: Team = await Database.get_team(code, ctx.guild.id)
         matches: list[Match] = await Database.get_matches_by_team(team)
@@ -138,14 +138,14 @@ class TeamsCog(commands.Cog, name="Teams"):
                 "Cannot edit emoji for a team that is already in matches.",
             )
 
-        if emoji == team.emoji:
+        if emoji.id == team.emoji:
             raise EditException(
                 team,
                 "New emoji is the same as the current emoji.",
             )
 
-        old_emoji = team.emoji
-        team.emoji = emoji
+        old_emoji = self.bot.get_emoji(team.emoji)
+        team.emoji = emoji.id
 
         await Database.update_team(code, team)
         await ctx.send(f"Changed emoji:\n {old_emoji} => {emoji}")
@@ -165,9 +165,9 @@ class TeamsCog(commands.Cog, name="Teams"):
         ctx,
         name: str,
         code: CodeConverter(False),
-        emoji: EmojiConverter,
+        emoji: commands.converter.EmojiConverter,
     ):
-        await Database.insert_team(Team(name.strip(), code, emoji, ctx.guild.id))
+        await Database.insert_team(Team(name.strip(), code, emoji.id, ctx.guild.id))
         await ctx.send(f"Added team `{code}`")
 
     @team_group.command(
@@ -204,8 +204,9 @@ class TeamsCog(commands.Cog, name="Teams"):
         embed = discord.Embed(title="Teams")
 
         for team in teams:
+            emoji = self.bot.get_emoji(team.emoji)
             embed.add_field(
-                name=f"{team.emoji} {team.name}",
+                name=f"{emoji} {team.name}",
                 value=f"Code: `{team.code}`",
             )
         await ctx.send(embed=embed)

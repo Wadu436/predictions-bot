@@ -2,11 +2,9 @@ import asyncio
 import math
 import re
 import uuid
-from os import error
 from typing import Optional
 
 import discord
-from discord import team
 from discord.ext import commands
 
 from src.aiomediawiki.aiomediawiki import APIException, leaguepedia
@@ -108,7 +106,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     async def update_fandom_teams(self, tournament_overviewpage: str, guild_id: int):
         teams = await leaguepedia.get_teams(tournament_overviewpage)
-        team_images = []
         guild: discord.Guild = self.bot.get_guild(guild_id)
         guild_teams = await Database.get_teams_by_guild(guild_id)
 
@@ -143,10 +140,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
             return
 
         coro_list = [add_team(t) for t in teams_to_create]
-        for coro in coro_list:
-            await coro
-        # for f in asyncio.as_completed():
-        #    await f
+        # for coro in coro_list:
+        #     await coro
+        for f in asyncio.as_completed(coro_list):
+            await f
 
     async def save_votes(self, match: Match, tournament: Tournament) -> bool:
         channel = self.bot.get_channel(tournament.channel)
@@ -165,20 +162,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
         games_dict: dict[int, int] = dict()
 
         for reaction in reactions:
-            if str(reaction) not in team_emojis + games_emojis:
-                continue
-
             users = await reaction.users().flatten()
-
-            if str(reaction) in team_emojis:
+            if reaction.custom_emoji and (reaction.emoji.id in team_emojis):
                 team = team_emojis.index(str(reaction)) + 1
                 for user in users:
                     if user == self.bot.user:
                         continue
                     team_dict[user.id] = team
                     user_set.add(user)
-
-            elif str(reaction) in games_emojis:
+            if not reaction.custom_emoji and (reaction.emoji.id not in games_emojis):
                 games = games_emojis.index(str(reaction)) + math.ceil(match.bestof / 2)
                 for user in users:
                     if user == self.bot.user:
@@ -209,8 +201,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         return True
 
     async def generate_leaderboard(self, tournament: Tournament) -> str:
-        db_cog = self.bot.get_cog("Database")
-
         # Leaderboard
         leaderboard = await Database.get_leaderboard(tournament.id, self.score_table)
         leaderboard_strings = []
@@ -270,7 +260,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         return leaderboard_str
 
     async def generate_tournament_message(self, tournament: Tournament):
-
         channel = self.bot.get_channel(tournament.channel)
         if channel is None:
             return ""
@@ -310,14 +299,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
             teams[team.code] = team
 
         team1 = teams[match.team1]
+        team1_emoji = self.bot.get_emoji(team1.emoji)
         team2 = teams[match.team2]
+        team2_emoji = self.bot.get_emoji(team2.emoji)
 
         match_message_header = f"**{match.id}. {match.name}** - *BO{match.bestof}*"
         if match.running != 0:
             if match.running == 2:
                 match_message_header += " - Closed"
             match_message_footer = (
-                f"{team1.emoji} {team1.name} vs {team2.name} {team2.emoji}"
+                f"{team1_emoji} {team1.name} vs {team2.name} {team2_emoji}"
             )
         else:
             if match.result == 1:
@@ -325,14 +316,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     f" - Result: {match.win_games}-{match.lose_games}"
                 )
                 match_message_footer = (
-                    f"**{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji}"
+                    f"**{team1_emoji} {team1.name}** vs {team2.name} {team2_emoji}"
                 )
             else:
                 match_message_header += (
                     f" - Result: {match.lose_games}-{match.win_games}"
                 )
                 match_message_footer = (
-                    f"{team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}**"
+                    f"{team1_emoji} {team1.name} vs **{team2.name} {team2_emoji}**"
                 )
 
         return match_message_header + "\n" + match_message_footer
@@ -656,8 +647,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await self.update_match_message(match)
 
         # Add Team reacts
-        await message.add_reaction(team1.emoji)
-        await message.add_reaction(team2.emoji)
+        await message.add_reaction(self.bot.get_emoji(team1.emoji))
+        await message.add_reaction(self.bot.get_emoji(team2.emoji))
 
         # Add Games reacts
         games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -755,8 +746,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             team2 = await Database.get_team(match.team2, tournament.guild)
 
             # Add Team reacts
-            await message.add_reaction(team1.emoji)
-            await message.add_reaction(team2.emoji)
+            await message.add_reaction(self.bot.get_emoji(team1.emoji))
+            await message.add_reaction(self.bot.get_emoji(team2.emoji))
 
             # Add Games reacts
             games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -799,8 +790,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             team1: Optional[Team] = await Database.get_team(match.team1, match.guild)
             team2: Optional[Team] = await Database.get_team(match.team2, match.guild)
 
-            await message.add_reaction(team1.emoji)
-            await message.add_reaction(team2.emoji)
+            await message.add_reaction(self.bot.get_emoji(team1.emoji))
+            await message.add_reaction(self.bot.get_emoji(team2.emoji))
 
             # Add Games reacts
             games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -857,11 +848,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in past_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-
+                team1_emoji = self.bot.get_emoji(team1.emoji)
+                team2_emoji = self.bot.get_emoji(team2.emoji)
                 if match.result == 1:
-                    match_content = f"{match.id}. {match.name}: **{team1.emoji} {team1.name}** vs {team2.name} {team2.emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
+                    match_content = f"{match.id}. {match.name}: **{team1_emoji} {team1.name}** vs {team2.name} {team2_emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
                 elif match.result == 2:
-                    match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs **{team2.name} {team2.emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
+                    match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs **{team2.name} {team2_emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
                 paginator.add_line(match_content)
 
         if closed_matches:
@@ -871,7 +863,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in closed_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-                match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
+                match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
         if active_matches:
             paginator.add_line("")
@@ -880,7 +872,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in active_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
-                match_content = f"{match.id}. {match.name}: {team1.emoji} {team1.name} vs {team2.name} {team2.emoji} - BO{match.bestof}"
+                match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
 
         if not (past_matches or closed_matches or active_matches):
@@ -910,32 +902,50 @@ class TournamentCog(commands.Cog, name="Tournament"):
             team2: Optional[Team] = await Database.get_team(match.team2, match.guild)
 
             to_remove = set()
-            emoji = str(payload.emoji)
+            emoji: discord.PartialEmoji = payload.emoji
 
             # Team
             team_emoji = {team1.emoji, team2.emoji}
-            if emoji in team_emoji:
-                team_emoji.remove(emoji)
-                to_remove.update(team_emoji)
+            if emoji.id in team_emoji:
+                team_emoji.remove(emoji.id)
+                to_remove.update({str(self.bot.get_emoji(e)) for e in team_emoji})
 
             # Games
             if match.bestof > 1:
-                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-                games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
+                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"][
+                    math.floor(match.bestof / 2) : match.bestof
+                ]
                 games_emojis = set(games_emojis)
-                if emoji in games_emojis:
-                    games_emojis.remove(emoji)
+                if str(emoji) in games_emojis:
+                    games_emojis.remove(str(emoji))
                     to_remove.update(games_emojis)
 
-            for reaction in message.reactions:
+            async def reaction_get_users(reaction):
+                return (reaction, [u.id for u in await reaction.users().flatten()])
+
+            async def remove_reaction(reaction: discord.Reaction):
                 str_react = str(reaction)
                 if str_react not in to_remove:
-                    continue
-                react_user = await reaction.users().get(id=payload.user_id)
-                if react_user is not None:
-                    await message.remove_reaction(
-                        reaction, discord.Object(payload.user_id)
-                    )
+                    return
+                await reaction.remove(discord.Object(payload.user_id))
+
+            reaction_users = []
+            for f in asyncio.as_completed(
+                [
+                    reaction_get_users(r)
+                    for r in message.reactions
+                    if str(r.emoji) in to_remove
+                ]
+            ):
+                reaction_users.append(await f)
+
+            coro_list = [
+                remove_reaction(r)
+                for (r, u_id) in reaction_users
+                if payload.user_id in u_id
+            ]
+            for f in asyncio.as_completed(coro_list):
+                await f
 
         # Check if message is a dialog message
         if (payload.message_id in self.dialogs.keys()) and (str(payload.emoji) == "✅"):
@@ -946,7 +956,9 @@ class TournamentCog(commands.Cog, name="Tournament"):
             # Check if user has manage messages permission
             perms = payload.member.permissions_in(channel)
             if not perms.manage_messages:
-                await message.remove_reaction(reaction, discord.Object(payload.user_id))
+                await message.remove_reaction(
+                    payload.emoji, discord.Object(payload.user_id)
+                )
                 return
 
             # End match
@@ -966,26 +978,27 @@ class TournamentCog(commands.Cog, name="Tournament"):
             games_emojis = []
             # Find games choice
             if match.bestof > 1:
-                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-                games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
+                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"][
+                    math.floor(match.bestof / 2) : match.bestof
+                ]
                 game_choice = 0
 
             for r in message.reactions:
-                if str(r) in [team1.emoji, team2.emoji]:
+                if r.emoji.id in [team1.emoji, team2.emoji]:
                     react_user = await r.users().get(id=payload.user_id)
                     if react_user is not None:
                         if team_choice == 0:
-                            if str(r) == team1.emoji:
+                            if r.emoji.id == team1.emoji:
                                 team_choice = 1  # team 1
                             else:
                                 team_choice = 2  # team 2
                         else:
                             team_choice = -1  # two teams selected -> invalid
-                if str(r) in games_emojis:
+                if str(r.emoji) in games_emojis:
                     react_user = await r.users().get(id=payload.user_id)
                     if react_user is not None:
                         if game_choice == 0:
-                            index = games_emojis.index(str(r))
+                            index = games_emojis.index(str(r.emoji))
                             game_choice = math.floor(match.bestof / 2) + index + 1
                         else:
                             game_choice = -1  # two+ game choices selected -> invalid
@@ -1011,21 +1024,22 @@ class TournamentCog(commands.Cog, name="Tournament"):
             match.running = 0
             match.games = game_choice
             match.result = team_choice
+            match.__post_init__()  # Refresh winning and losing games
 
             await Database.update_match(match)
-            match = Match(
-                match.id,
-                match.name,
-                match.guild,
-                match.message,
-                match.running,
-                match.result,
-                match.games,
-                match.team1,
-                match.team2,
-                match.tournament,
-                match.bestof,
-            )  # Refresh match (winning and losing games)
+            # match = Match(
+            #     match.id,
+            #     match.name,
+            #     match.guild,
+            #     match.message,
+            #     match.running,
+            #     match.result,
+            #     match.games,
+            #     match.team1,
+            #     match.team2,
+            #     match.tournament,
+            #     match.bestof,
+            # )
 
             tournament = await Database.get_tournament(match.tournament)
             await self.update_match_message(match)

@@ -12,7 +12,7 @@ import config
 class Team:
     name: str
     code: str
-    emoji: str
+    emoji: int
     guild: int
     isfandom: bool = False
     fandomOverviewPage: str = None
@@ -143,7 +143,7 @@ class Database:
     async def update_team(original_code, team: Team) -> None:
         db = await asyncpg.connect(config.postgres)
         await db.execute(
-            "UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, fandomOverviewPage=$7 WHERE code=$4 AND guild=$5;",
+            'UPDATE teams SET name=$1, code=$2, emoji=$3, isfandom=$6, "fandomOverviewPage"=$7 WHERE code=$4 AND guild=$5;',
             team.name,
             team.code,
             team.emoji,
