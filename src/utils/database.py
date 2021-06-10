@@ -130,6 +130,21 @@ class Database:
             return Team.from_row(tr)
 
     @staticmethod
+    async def get_team_by_fandomoverviewpage(
+        fandomoverviewpage: str,
+        guild: int,
+    ) -> Optional[Team]:
+        db = await asyncpg.connect(config.postgres)
+        tr = await db.fetchrow(
+            "SELECT * FROM teams WHERE fandomoverviewpage=$1 AND guild=$2",
+            fandomoverviewpage,
+            guild,
+        )
+        await db.close()
+        if tr is not None:
+            return Team.from_row(tr)
+
+    @staticmethod
     async def get_teams_by_guild(guild: int) -> list[Team]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch("SELECT * FROM teams WHERE guild=$1", guild)
@@ -251,11 +266,10 @@ class Database:
         await db.close()
 
     @staticmethod
-    async def get_running_fandom_tournaments(guild: int) -> list[Tournament]:
+    async def get_running_fandom_tournaments() -> list[Tournament]:
         db = await asyncpg.connect(config.postgres)
         records = await db.fetch(
-            "SELECT * FROM tournaments WHERE guild=$1 AND isfandom=TRUE AND running=1;",
-            guild,
+            "SELECT * FROM tournaments WHERE isfandom=TRUE AND running=1;",
         )
         await db.close()
         tournaments: list[Tournament] = []
@@ -316,6 +330,21 @@ class Database:
     async def get_match_by_message(message: int) -> Optional[Match]:
         db = await asyncpg.connect(config.postgres)
         mr = await db.fetchrow("SELECT * FROM matches WHERE message=$1", message)
+        await db.close()
+        if mr is not None:
+            return Match.from_row(mr)
+
+    @staticmethod
+    async def get_match_by_fandommatchid(
+        fandommatchid: str,
+        tournament: uuid.UUID,
+    ) -> Optional[Match]:
+        db = await asyncpg.connect(config.postgres)
+        mr = await db.fetchrow(
+            "SELECT * FROM matches WHERE fandommatchid=$1 AND tournament=$2",
+            fandommatchid,
+            tournament,
+        )
         await db.close()
         if mr is not None:
             return Match.from_row(mr)
