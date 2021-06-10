@@ -465,6 +465,51 @@ class Database:
         )
         await db.close()
 
+    # UserMatch-related queries
+    @staticmethod
+    async def insert_usermatches_and_update_match(
+        usermatches: list[UserMatch],
+        match: Match,
+    ):
+        """Insert usermatches and update match in one atomic operation.
+        Needed for closing a match
+        (It would bring the database in an inconsistent state if
+        the usermatches were inserted without updating the match,
+        or not all usermatches are inserted)
+        """
+        db: asyncpg.Connection = await asyncpg.connect(config.postgres)
+        to_insert = [
+            (
+                usermatch.user_id,
+                usermatch.match_id,
+                usermatch.match_tournament,
+                usermatch.team,
+                usermatch.games,
+            )
+            for usermatch in usermatches
+        ]
+        with db.transaction():
+            await db.executemany(
+                "INSERT INTO users_matches VALUES ($1, $2, $3, $4, $5);",
+                to_insert,
+            )
+            await db.execute(
+                "UPDATE matches SET name=$1, guild=$2, message=$3, running=$4, result=$5, games=$6, team1=$7, team2=$8, bestof=$9, fandommatchid=$12 WHERE id=$10 AND tournament=$11;",
+                match.name,
+                match.guild,
+                match.message,
+                match.running,
+                match.result,
+                match.games,
+                match.team1,
+                match.team2,
+                match.bestof,
+                match.id,
+                match.tournament,
+                match.fandomMatchId,
+            )
+        await db.close()
+
     @staticmethod
     async def get_usermatch(
         user_id: int,

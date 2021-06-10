@@ -230,10 +230,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         self,
         match: Match,
     ):
-        await self.save_votes(match)
+        usermatches = await self.save_votes(match)
 
         match.running = 2
-        await Database.update_match(match)
+        await Database.insert_usermatches_and_update_match(usermatches, match)
 
         await self.update_match_message(match)
 
@@ -355,7 +355,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         return error
 
-    async def save_votes(self, match: Match) -> bool:
+    async def save_votes(self, match: Match) -> list[UserMatch]:
         tournament = await Database.get_tournament(match.tournament)
         channel = self.bot.get_channel(tournament.channel)
         message = await channel.fetch_message(match.message)
@@ -389,6 +389,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     games_dict[user.id] = games
                     user_set.add(user)
 
+        usermatches = []
         for user in user_set:
             # Update user table
             db_user = await Database.get_user(user.id)
@@ -400,15 +401,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 db_user = User(user.id, user.name + "#" + user.discriminator)
                 await Database.insert_user(db_user)
 
-            # Insert usermatch
-            usermatch = UserMatch(
-                user.id,
-                match.id,
-                match.tournament,
-                team_dict.get(user.id, 0),
-                games_dict.get(user.id, 0),
+            usermatches.append(
+                UserMatch(
+                    user.id,
+                    match.id,
+                    match.tournament,
+                    team_dict.get(user.id, 0),
+                    games_dict.get(user.id, 0),
+                )
             )
-            await Database.insert_usermatch(usermatch)
         return True
 
     async def generate_leaderboard(self, tournament: Tournament) -> str:
@@ -896,12 +897,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 raise CantEndMatch(match, "This match has already ended.")
 
             if match.running == 1:
-                await self.save_votes(match, tournament)
-
-                match.running = 2
-                await Database.update_match(match)
-
-                await self.update_match_message(match)
+                await self.close_match(match)
 
             # Check if dialog already exists
             if match.message in self.dialogs.values():
