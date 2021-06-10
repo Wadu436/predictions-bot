@@ -2,12 +2,16 @@ import asyncio
 import math
 import re
 import uuid
+from datetime import datetime, timedelta
 from typing import Optional
 
 import discord
-from discord.ext import commands
+from discord.abc import Messageable
+from discord.errors import HTTPException
+from discord.ext import commands, tasks
 
 from src.aiomediawiki.aiomediawiki import APIException, leaguepedia
+from src.aiomediawiki.tables.matchschedule import MatchScheduleRow
 from src.aiomediawiki.tables.teams import TeamsRow
 from src.utils import decorators
 from src.utils.converters import BestOfXConverter, CodeConverter
@@ -101,10 +105,205 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.update_fandom_matches_task.start()
+
+    def cog_unload(self):
+        self.update_fandom_matches_task.stop()
+
+    # ------------------------------ TASKS -----------------------------
+
+    @tasks.loop(minutes=5)
+    async def update_fandom_matches_task(self):
+        fandom_tournaments = await Database.get_running_fandom_tournaments()
+        for tournament in fandom_tournaments:
+            await self.update_fandom_matches(tournament)
+
+    async def update_fandom_matches(self, tournament: Tournament):
+        tabs = await leaguepedia.get_tabs_before(
+            tournament.fandomOverviewPage, datetime.now() + timedelta(days=4)
+        )
+
+        fandommatches = await leaguepedia.get_matches_in_tabs(
+            tournament.fandomOverviewPage,
+            tabs,
+        )
+
+        any_closed: bool = False
+
+        for fandommatch in fandommatches:
+            # Check if match already exists
+            match = await Database.get_match_by_fandommatchid(
+                fandommatch.match_id, tournament.id
+            )
+            if match is None:
+                if fandommatch.winner is None:
+                    # Match does not exist yet
+                    team1 = await Database.get_team_by_fandomoverviewpage(
+                        fandommatch.team1, tournament.guild
+                    )
+                    team2 = await Database.get_team_by_fandomoverviewpage(
+                        fandommatch.team2, tournament.guild
+                    )
+                    try:
+                        await self.start_match(
+                            tournament=tournament,
+                            name=f"{fandommatch.tab} Match {fandommatch.n_matchintab}",
+                            team1=team1,
+                            team2=team2,
+                            bestof=fandommatch.best_of,
+                            fandomMatchId=fandommatch.match_id,
+                        )
+                    except Exception:
+                        pass
+            elif match.running != 0:
+                # Match is running or closed, check if we should close/end it
+                if (
+                    match.running == 1
+                    and (fandommatch.start - timedelta(minutes=30)) < datetime.now()
+                ):
+                    # Close it
+                    await self.close_match(match)
+
+                if fandommatch.winner is not None:
+                    any_closed = True
+                    await self.end_match(
+                        match,
+                        fandommatch.winner,
+                        fandommatch.team1_score + fandommatch.team2_score,
+                        update_tournament_message=False,
+                    )
+        if any_closed:
+            await self.update_tournament_message(tournament)
 
     # ----------------------------- UTILITY ----------------------------
 
-    async def update_fandom_teams(self, tournament_overviewpage: str, guild_id: int):
+    async def start_match(
+        self,
+        tournament: Tournament,
+        name: str,
+        team1: Team,
+        team2: Team,
+        bestof: int,
+        fandomMatchId: str = None,
+    ):
+        # Calculate match id
+        id = await Database.get_num_matches(tournament.id) + 1
+
+        channel: discord.abc.Messageable = self.bot.get_channel(tournament.channel)
+        message: discord.Message = await channel.send("A match is starting...")
+
+        # Insert
+        match = Match(
+            id,
+            name,
+            tournament.guild,
+            message.id,
+            1,
+            0,
+            0,
+            team1.code,
+            team2.code,
+            tournament.id,
+            bestof,
+            fandomMatchId,
+        )
+        try:
+            await Database.insert_match(match)
+        except Exception as e:
+            await message.delete()
+            raise e
+
+        await self.update_match_message(match)
+
+        # Add Team reacts
+        await message.add_reaction(self.bot.get_emoji(team1.emoji))
+        await message.add_reaction(self.bot.get_emoji(team2.emoji))
+
+        # Add Games reacts
+        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+
+        if bestof > 1:
+            for i in range(math.floor(bestof / 2), bestof):
+                await message.add_reaction(games_emojis[i])
+
+    async def close_match(
+        self,
+        match: Match,
+    ):
+        await self.save_votes(match)
+
+        match.running = 2
+        await Database.update_match(match)
+
+        await self.update_match_message(match)
+
+    async def end_match(
+        self,
+        match: Match,
+        team: int,
+        games: int,
+        update_tournament_message: bool = True,
+    ):
+        match.running = 0
+        match.games = games
+        match.result = team
+        match.__post_init__()  # Refresh winning and losing games
+
+        await Database.update_match(match)
+
+        tournament = await Database.get_tournament(match.tournament)
+        await self.update_match_message(match)
+        if update_tournament_message:
+            await self.update_tournament_message(tournament)
+
+        # Send update message if necesary
+        if tournament.updatesChannel is not None:
+            channel = self.bot.get_channel(tournament.updatesChannel)
+            # get all winning users
+            ums: list[UserMatch] = await Database.get_usermatch_by_match(
+                match.id, match.tournament
+            )
+
+            team_winners: list[str] = []
+            for um in ums:
+                if um.team == match.result:
+                    user = await Database.get_user(um.user_id)
+                    team_winners.append(user.name)
+            team_winners.sort()
+
+            msg = f"**Match {match.id} ({match.name}) has ended!**"
+
+            if len(team_winners) == 0:
+                msg += "\n**Noone** predicted the correct team."
+            elif len(team_winners) == 1:
+                msg += f"\n**{team_winners[0]}** predicted the correct team."
+            elif len(team_winners) == 2:
+                msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
+            else:
+                msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
+
+            if match.bestof > 1:
+                game_winners: list[str] = []
+                for um in ums:
+                    if um.games == match.games:
+                        user = await Database.get_user(um.user_id)
+                        game_winners.append(user.name)
+                game_winners.sort()
+
+                if len(game_winners) == 0:
+                    msg += "\n**Noone** predicted the correct amount of games."
+                elif len(game_winners) == 1:
+                    msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
+                elif len(game_winners) == 2:
+                    msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
+                else:
+                    msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
+
+            await channel.send(msg)
+
+    async def update_fandom_teams(
+        self, tournament_overviewpage: str, guild_id: int
+    ) -> bool:
         teams = await leaguepedia.get_teams(tournament_overviewpage)
         guild: discord.Guild = self.bot.get_guild(guild_id)
         guild_teams = await Database.get_teams_by_guild(guild_id)
@@ -122,30 +321,42 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 t.isfandom = True
                 await Database.update_team(t.code, t)
 
-        async def add_team(team: TeamsRow):
+        error = False
+
+        # Return true if there was an error
+        async def add_team(team: TeamsRow) -> bool:
             # page_info = await leaguepedia.get_page_info(team.overviewPage, ["images"])
             team_image = f"{team.overviewPage}logo square.png"
             img = await leaguepedia.get_file(team_image, size=256)
-            emoji = await guild.create_custom_emoji(name=team.short.lower(), image=img)
+            try:
+                emoji: discord.Emoji = await guild.create_custom_emoji(
+                    name=team.short.lower(), image=img
+                )
+            except discord.errors.HTTPException:
+                return True
+
             await Database.insert_team(
                 Team(
                     team.name,
                     team.short.lower(),
-                    str(emoji),
+                    emoji.id,
                     guild_id,
                     True,
                     team.overviewPage,
                 )
             )
-            return
+            return False
 
         coro_list = [add_team(t) for t in teams_to_create]
         # for coro in coro_list:
         #     await coro
         for f in asyncio.as_completed(coro_list):
-            await f
+            error = (await f) or error
 
-    async def save_votes(self, match: Match, tournament: Tournament) -> bool:
+        return error
+
+    async def save_votes(self, match: Match) -> bool:
+        tournament = await Database.get_tournament(match.tournament)
         channel = self.bot.get_channel(tournament.channel)
         message = await channel.fetch_message(match.message)
         reactions: list[discord.Reaction] = message.reactions
@@ -343,7 +554,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await message.edit(content=content)
 
     async def update_match_message(self, match):
-
         tournament: Optional[Tournament] = await Database.get_tournament(
             match.tournament
         )
@@ -437,10 +647,16 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if is_link:
                 message: discord.Message = await ctx.send("Adding teams...")
 
-                await self.update_fandom_teams(
+                error = await self.update_fandom_teams(
                     fandomTournament.overviewPage,
                     ctx.guild.id,
                 )
+
+                if error:
+                    await message.edit(
+                        content="There was an error while creating the teams. Perhaps the bot doesn't have permission to create new emoji or there aren't any emote slots left."
+                    )
+                    return
 
                 await message.edit(content="Tournament is starting...")
             else:
@@ -484,7 +700,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             await ctx.message.delete()
 
             if tournament.isfandom:
-                pass  # TODO: start adding matches
+                # Create matches and stuff
+                await self.update_fandom_matches(tournament)
 
     @tournament_group.command(
         name="end",
@@ -618,44 +835,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         team1: Optional[Team] = await Database.get_team(team1_code, ctx.guild.id)
         team2: Optional[Team] = await Database.get_team(team2_code, ctx.guild.id)
 
-        # Send message
-        message = await ctx.send("Match is starting...")
-
-        # Calculate match id
-        id = await Database.get_num_matches(tournament.id) + 1
-
-        # Insert
-        match = Match(
-            id,
-            name,
-            ctx.guild.id,
-            message.id,
-            1,
-            0,
-            0,
-            team1_code,
-            team2_code,
-            tournament.id,
-            bestof,
-        )
-        try:
-            await Database.insert_match(match)
-        except Exception as e:
-            await message.delete()
-            raise e
-
-        await self.update_match_message(match)
-
-        # Add Team reacts
-        await message.add_reaction(self.bot.get_emoji(team1.emoji))
-        await message.add_reaction(self.bot.get_emoji(team2.emoji))
-
-        # Add Games reacts
-        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-
-        if bestof > 1:
-            for i in range(math.floor(bestof / 2), bestof):
-                await message.add_reaction(games_emojis[i])
+        await self.start_match(tournament, name.strip(), team1, team2, bestof)
 
         await ctx.message.delete()
 
@@ -686,12 +866,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 errors += [f"Match with id {id} is not an open match."]
                 continue
 
-            await self.save_votes(match, tournament)
-
-            match.running = 2
-            await Database.update_match(match)
-
-            await self.update_match_message(match)
+            await self.close_match(match)
         if errors:
             await ctx.send("\n".join(errors))
         await ctx.message.delete()
@@ -863,6 +1038,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in closed_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
+                team1_emoji = self.bot.get_emoji(team1.emoji)
+                team2_emoji = self.bot.get_emoji(team2.emoji)
                 match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
         if active_matches:
@@ -872,6 +1049,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             for match in active_matches:
                 team1 = teams[match.team1]
                 team2 = teams[match.team2]
+                team1_emoji = self.bot.get_emoji(team1.emoji)
+                team2_emoji = self.bot.get_emoji(team2.emoji)
                 match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
 
@@ -880,6 +1059,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         for page in paginator.pages:
             await ctx.send(page)
+
+    @commands.command(
+        name="debug",
+    )
+    @commands.guild_only()
+    async def debug(self, ctx, n: int):
+        tournament = await Database.get_running_tournament(ctx.channel.id)
+        self.update_fandom_matches(tournament)
 
     # ----------------------------- EVENTS -----------------------------
 
@@ -1021,74 +1208,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 await message.remove_reaction("✅", discord.Object(payload.user_id))
                 return
 
-            match.running = 0
-            match.games = game_choice
-            match.result = team_choice
-            match.__post_init__()  # Refresh winning and losing games
-
-            await Database.update_match(match)
-            # match = Match(
-            #     match.id,
-            #     match.name,
-            #     match.guild,
-            #     match.message,
-            #     match.running,
-            #     match.result,
-            #     match.games,
-            #     match.team1,
-            #     match.team2,
-            #     match.tournament,
-            #     match.bestof,
-            # )
-
-            tournament = await Database.get_tournament(match.tournament)
-            await self.update_match_message(match)
-            await self.update_tournament_message(tournament)
-
-            # Send update message if necesary
-            if tournament.updatesChannel is not None:
-                channel = self.bot.get_channel(tournament.updatesChannel)
-                # get all winning users
-                ums: list[UserMatch] = await Database.get_usermatch_by_match(
-                    match.id, match.tournament
-                )
-
-                team_winners: list[str] = []
-                for um in ums:
-                    if um.team == match.result:
-                        user = await Database.get_user(um.user_id)
-                        team_winners.append(user.name)
-                team_winners.sort()
-
-                msg = f"**Match {match.id} ({match.name}) has ended!**"
-
-                if len(team_winners) == 0:
-                    msg += "\n**Noone** predicted the correct team."
-                elif len(team_winners) == 1:
-                    msg += f"\n**{team_winners[0]}** predicted the correct team."
-                elif len(team_winners) == 2:
-                    msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
-                else:
-                    msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
-
-                if match.bestof > 1:
-                    game_winners: list[str] = []
-                    for um in ums:
-                        if um.games == match.games:
-                            user = await Database.get_user(um.user_id)
-                            game_winners.append(user.name)
-                    game_winners.sort()
-
-                    if len(game_winners) == 0:
-                        msg += "\n**Noone** predicted the correct amount of games."
-                    elif len(game_winners) == 1:
-                        msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
-                    elif len(game_winners) == 2:
-                        msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
-                    else:
-                        msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
-
-                await channel.send(msg)
+            await self.end_match(match, game_choice, team_choice)
 
             # Delete dialog
             await message.delete()
