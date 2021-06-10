@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 import aiohttp
@@ -242,8 +243,37 @@ class Leaguepedia(Site):
             tables=MatchScheduleRow.table,
             fields=_fields_to_query(MatchScheduleRow.fields),
             where=f"OverviewPage='{overviewpage}'",
+            order_by="DateTime_UTC",
         )
         return [MatchScheduleRow.from_row(row) for row in result]
+
+    async def get_matches_in_tabs(
+        self,
+        overviewpage: str,
+        tabs: list[str],
+    ) -> list[MatchScheduleRow]:
+        tab_comp = [f"Tab='{t}'" for t in tabs]
+        result = await self.cargo_query(
+            tables=MatchScheduleRow.table,
+            fields=_fields_to_query(MatchScheduleRow.fields),
+            where=f"OverviewPage='{overviewpage}' AND ({' OR '.join(tab_comp)})",
+            order_by="DateTime_UTC",
+        )
+        return [MatchScheduleRow.from_row(row) for row in result]
+
+    async def get_tabs_before(
+        self,
+        overviewpage: str,
+        date: datetime,
+    ) -> list[str]:
+        result = await self.cargo_query(
+            tables=MatchScheduleRow.table,
+            fields="Tab",
+            where=f"OverviewPage='{overviewpage}' AND DateTime_UTC < '{date.strftime('%Y-%m-%d %H:%M')}'",
+            group_by="Tab",
+            order_by="DateTime_UTC",
+        )
+        return [row["Tab"] for row in result]
 
     async def get_team(self, name: str) -> Optional[TeamsRow]:
         result = await self.cargo_query(
