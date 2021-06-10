@@ -41,6 +41,7 @@ CREATE TABLE matches (
     bestof INTEGER NOT NULL,
     fandommatchid TEXT,
     PRIMARY KEY(id, tournament),
+    UNIQUE(tournament, fandommatchid),
     FOREIGN KEY (team1, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
     FOREIGN KEY (team2, guild) REFERENCES teams (code, guild) ON UPDATE CASCADE,
     FOREIGN KEY (tournament) REFERENCES tournaments (id) ON DELETE CASCADE
