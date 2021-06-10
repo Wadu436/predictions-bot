@@ -19,3 +19,6 @@ Run `python main.py`  \
 Enter your token 
 
 If you wish to change your token at a later time, you can do so in `./persistent/config.json`
+
+## Credits
+For automated tournaments, it uses the amazing Leaguepedia database. Big thanks to them! (https://lol.fandom.com/)
