@@ -15,7 +15,7 @@ postgres = "" # your postgresql link (format: "postgresql://[user[:password]@][i
 token = "" # your discord bot token
 ```
 Install the requirements: `pip install -r requirements.txt` \
-Run `python main.py`  \
+Run `python main.py`
 
 Alternatively, if you want to run it with docker, you can use `docker-compose up -d` after setting up config.py.
 
