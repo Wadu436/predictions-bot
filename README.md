@@ -9,16 +9,15 @@ Python 3.9+ \
 
 ## Usage
 Set up a PostgreSQL database and create a user and a database on it. \
-Create config.py in the root directory. 
+Create config.py in the root directory and enter your information.
 ```py
 postgres = "" # your postgresql link (format: "postgresql://[user[:password]@][ip][:port][/dbname]")
 token = "" # your discord bot token
 ```
 Install the requirements: `pip install -r requirements.txt` \
 Run `python main.py`  \
-Enter your token 
 
-If you wish to change your token at a later time, you can do so in `./persistent/config.json`
+Alternatively, if you want to run it with docker, you can use `docker-compose up -d` after setting up config.py.
 
 ## Credits
 For automated tournaments, it uses the amazing Leaguepedia database. Big thanks to them! (https://lol.fandom.com/)
