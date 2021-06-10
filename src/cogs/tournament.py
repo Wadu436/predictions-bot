@@ -410,7 +410,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     games_dict.get(user.id, 0),
                 )
             )
-        return True
+        return usermatches
 
     async def generate_leaderboard(self, tournament: Tournament) -> str:
         # Leaderboard
