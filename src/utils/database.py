@@ -488,7 +488,7 @@ class Database:
             )
             for usermatch in usermatches
         ]
-        with db.transaction():
+        async with db.transaction():
             await db.executemany(
                 "INSERT INTO users_matches VALUES ($1, $2, $3, $4, $5);",
                 to_insert,
