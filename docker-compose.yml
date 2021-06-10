@@ -1,0 +1,7 @@
+version: "2.2"
+services:
+        predictions:
+                container_name: predictions
+                build: .
+                network_mode: "host"
+                restart: unless-stopped
