@@ -128,7 +128,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
             tabs,
         )
 
-        any_closed: bool = False
+        any_ended: bool = False
         matchdays_to_close: set[str, int] = {
             (fandommatch.tab, fandommatch.matchday)
             for fandommatch in fandommatches
