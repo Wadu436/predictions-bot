@@ -129,6 +129,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
         )
 
         any_closed: bool = False
+        matchdays_to_close: set[str, int] = {
+            (fandommatch.tab, fandommatch.matchday)
+            for fandommatch in fandommatches
+            if (fandommatch.start - timedelta(minutes=30)) < datetime.now()
+        }
 
         for fandommatch in fandommatches:
             # Check if match already exists
@@ -159,20 +164,24 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 # Match is running or closed, check if we should close/end it
                 if (
                     match.running == 1
-                    and (fandommatch.start - timedelta(minutes=30)) < datetime.now()
+                    and (fandommatch.tab, fandommatch.matchday) in matchdays_to_close
                 ):
                     # Close it
                     await self.close_match(match)
 
                 if fandommatch.winner is not None:
-                    any_closed = True
+                    # extra check to make sure it's closed first, but this shouldn't happen normally
+                    if match.running == 1:
+                        await self.close_match(match)
+
+                    any_ended = True
                     await self.end_match(
                         match,
                         fandommatch.winner,
                         fandommatch.team1_score + fandommatch.team2_score,
                         update_tournament_message=False,
                     )
-        if any_closed:
+        if any_ended:
             await self.update_tournament_message(tournament)
 
     # ----------------------------- UTILITY ----------------------------

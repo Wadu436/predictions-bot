@@ -13,6 +13,7 @@ class MatchScheduleRow:
         "DateTime_UTC",
         "BestOf",
         "MatchId",
+        "MatchDay",
         "Tab",
         "N_MatchInTab",
     }
@@ -31,6 +32,7 @@ class MatchScheduleRow:
     match_id: str
     tab: str
     n_matchintab: int
+    matchday: int
 
     @classmethod
     def from_row(cls, row):
@@ -45,4 +47,5 @@ class MatchScheduleRow:
             match_id=row["MatchId"],
             tab=row["Tab"],
             n_matchintab=int(row["N MatchInTab"]),
+            matchday=int(row["MatchDay"]),
         )
