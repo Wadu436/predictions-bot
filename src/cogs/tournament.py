@@ -280,7 +280,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     team_winners.append(user.name)
             team_winners.sort()
 
-            msg = f"**Match {match.id} ({match.name}) has ended!**"
+            msg = f"**Match {match.id} ({match.name}) in {tournament.name} has ended!**"
 
             if len(team_winners) == 0:
                 msg += "\n**Noone** predicted the correct team."
