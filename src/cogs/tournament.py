@@ -273,6 +273,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 match.id, match.tournament
             )
 
+            # TODO: do this in SQL
             team_winners: list[str] = []
             for um in ums:
                 if um.team == match.result:
@@ -280,7 +281,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     team_winners.append(user.name)
             team_winners.sort()
 
-            msg = f"**Match {match.id} ({match.name}) in {tournament.name} has ended!**"
+            winning_team = await Database.get_team(
+                match.team1 if match.result == 1 else match.team2, tournament.guild
+            )
+            losing_team = await Database.get_team(
+                match.team2 if match.result == 1 else match.team1, tournament.guild
+            )
+
+            msg = f"**Match {match.id} ({match.name}) in {tournament.name} has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
 
             if len(team_winners) == 0:
                 msg += "\n**Noone** predicted the correct team."
