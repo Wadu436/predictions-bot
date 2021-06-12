@@ -288,7 +288,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 match.team2 if match.result == 1 else match.team1, tournament.guild
             )
 
-            msg = f"**Match {match.id} ({match.name}) in {tournament.name} has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
+            msg = f"**{tournament.name} Match {match.id} ({match.name}) has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
 
             if len(team_winners) == 0:
                 msg += "\n**Noone** predicted the correct team."
