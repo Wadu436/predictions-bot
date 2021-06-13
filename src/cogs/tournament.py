@@ -523,7 +523,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         # Header
         content_header = f"**{tournament.name}**"
         if tournament.isfandom:
-            content_header += f" ({leaguepedia.wiki_url}{tournament.fandomOverviewPage.replace(' ', '_')})"
+            content_header += f" (<{leaguepedia.wiki_url}{tournament.fandomOverviewPage.replace(' ', '_')}>)"
         if tournament.running == 0:
             content_header += f" - Ended"
         content_header += "\n\n"
