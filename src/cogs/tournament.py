@@ -1,12 +1,15 @@
 import asyncio
+import io
 import math
 import re
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
+import colorthief
 import discord
 from discord.abc import Messageable
+from discord.embeds import Embed
 from discord.errors import HTTPException
 from discord.ext import commands, tasks
 
@@ -274,49 +277,68 @@ class TournamentCog(commands.Cog, name="Tournament"):
             )
 
             # TODO: do this in SQL
-            team_winners: list[str] = []
+            leaderboard = await Database.get_leaderboard(
+                tournament.id, self.score_table
+            )
+            leaderboard_dict = {k: v for (k, v, _, _, _) in leaderboard}
+            team_winners = []
             for um in ums:
                 if um.team == match.result:
                     user = await Database.get_user(um.user_id)
-                    team_winners.append(user.name)
-            team_winners.sort()
+                    team_winners.append((user.name, leaderboard_dict[user.name]))
+            team_winners.sort(key=lambda x: x[0])
 
-            winning_team = await Database.get_team(
-                match.team1 if match.result == 1 else match.team2, tournament.guild
-            )
-            losing_team = await Database.get_team(
-                match.team2 if match.result == 1 else match.team1, tournament.guild
-            )
-
-            msg = f"**{tournament.name} Match {match.id} ({match.name}) has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
-
-            if len(team_winners) == 0:
-                msg += "\n**Noone** predicted the correct team."
-            elif len(team_winners) == 1:
-                msg += f"\n**{team_winners[0]}** predicted the correct team."
-            elif len(team_winners) == 2:
-                msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
-            else:
-                msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
-
+            game_winners = None
             if match.bestof > 1:
-                game_winners: list[str] = []
+                game_winners = []
                 for um in ums:
                     if um.games == match.games:
                         user = await Database.get_user(um.user_id)
-                        game_winners.append(user.name)
+                        game_winners.append((user.name, leaderboard_dict[user.name]))
                 game_winners.sort()
 
-                if len(game_winners) == 0:
-                    msg += "\n**Noone** predicted the correct amount of games."
-                elif len(game_winners) == 1:
-                    msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
-                elif len(game_winners) == 2:
-                    msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
-                else:
-                    msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
+            embeds = await self.construct_match_end_embeds(
+                match, tournament, team_winners, game_winners
+            )
+            for embed in embeds:
+                await channel.send(embed=embed)
 
-            await channel.send(msg)
+            # winning_team = await Database.get_team(
+            #     match.team1 if match.result == 1 else match.team2, tournament.guild
+            # )
+            # losing_team = await Database.get_team(
+            #     match.team2 if match.result == 1 else match.team1, tournament.guild
+            # )
+
+            # msg = f"**{tournament.name} Match {match.id} ({match.name}) has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
+
+            # if len(team_winners) == 0:
+            #     msg += "\n**Noone** predicted the correct team."
+            # elif len(team_winners) == 1:
+            #     msg += f"\n**{team_winners[0]}** predicted the correct team."
+            # elif len(team_winners) == 2:
+            #     msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
+            # else:
+            #     msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
+
+            # if match.bestof > 1:
+            #     game_winners: list[str] = []
+            #     for um in ums:
+            #         if um.games == match.games:
+            #             user = await Database.get_user(um.user_id)
+            #             game_winners.append(user.name)
+            #     game_winners.sort()
+
+            #     if len(game_winners) == 0:
+            #         msg += "\n**Noone** predicted the correct amount of games."
+            #     elif len(game_winners) == 1:
+            #         msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
+            #     elif len(game_winners) == 2:
+            #         msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
+            #     else:
+            #         msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
+
+            # await channel.send(msg)
 
     async def update_fandom_teams(
         self, tournament_overviewpage: str, guild_id: int
@@ -588,6 +610,106 @@ class TournamentCog(commands.Cog, name="Tournament"):
         content = await self.generate_match_message(match)
 
         await match_message.edit(content=content)
+
+    async def construct_match_end_embeds(
+        self,
+        match: Match,
+        tournament: Tournament,
+        team_correct: list[tuple[str, int]],  # (name, score)
+        game_correct: Optional[list[tuple[str, int]]] = None,  # (name, score)
+    ) -> list[Embed]:
+        def chunks(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i : i + n]
+
+        if match.result == 1:
+            team_winners = await Database.get_team(match.team1, match.guild)
+            team_losers = await Database.get_team(match.team2, match.guild)
+        if match.result == 2:
+            team_winners = await Database.get_team(match.team2, match.guild)
+            team_losers = await Database.get_team(match.team1, match.guild)
+
+        emoji: discord.Emoji = self.bot.get_emoji(team_winners.emoji)
+
+        try:
+            img_bytes = await emoji.url.read()
+        except Exception:
+            img_bytes = None
+
+        embed_color = discord.Colour.blurple()
+        if img_bytes:
+            img = io.BytesIO(img_bytes)
+            color = colorthief.ColorThief(img).get_color(quality=1)
+            embed_color = discord.Colour.from_rgb(*color)
+
+        embeds = []
+
+        base_embed = discord.Embed(
+            title=f"Results: {tournament.name} Match {match.id} ({match.name})",
+            description=f"**{team_winners.name}** defeated **{team_losers.name}** by **{match.win_games}-{match.lose_games}**",
+            colour=embed_color,
+        )
+        base_embed.set_thumbnail(url=emoji.url)
+
+        current_embed: discord.Embed = base_embed.copy()
+        if len(team_correct) > 0:
+            current_embed.add_field(
+                name="**The following player(s) predicted the correct winning team:**",
+                value="\u2800",
+                inline=False,
+            )
+
+            for (name, score) in team_correct:
+                if len(current_embed.fields) == 25:
+                    embeds.append(current_embed)
+                    current_embed = base_embed.copy()
+                    current_embed.add_field(
+                        name="**The following player(s) predicted the correct winning team:**",
+                        value="*Continued*",
+                        inline=False,
+                    )
+
+                current_embed.add_field(name=name, value=f"{score} points")
+        else:
+            current_embed.add_field(
+                name="**Noone predicted the correct team**",
+                value="\u2800",
+                inline=False,
+            )
+
+        if match.bestof != 1:
+            if len(current_embed.fields) > 20:
+                embeds.append(current_embed)
+                current_embed = base_embed.copy()
+
+            if len(game_correct) > 0:
+                current_embed.add_field(
+                    name="**The following player(s) predicted the correct amount of games:**",
+                    value="\u2800",
+                    inline=False,
+                )
+
+                for (name, score) in game_correct:
+                    if len(current_embed.fields) == 25:
+                        embeds.append(current_embed)
+                        current_embed = base_embed.copy()
+                        current_embed.add_field(
+                            name="**The following player(s) predicted the correct amount of games:**",
+                            value="*Continued*",
+                            inline=False,
+                        )
+
+                    current_embed.add_field(name=name, value=f"{score} points")
+            else:
+                current_embed.add_field(
+                    name="**Noone predicted the correct amount of games**",
+                    value="\u2800",
+                    inline=False,
+                )
+
+        embeds.append(current_embed)
+
+        return embeds
 
     # ----------------------------- GROUPS -----------------------------
 
@@ -1077,9 +1199,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         name="debug",
     )
     @commands.guild_only()
-    async def debug(self, ctx, n: int):
-        tournament = await Database.get_running_tournament(ctx.channel.id)
-        self.update_fandom_matches(tournament)
+    async def debug(self, ctx):
+        pass
 
     # ----------------------------- EVENTS -----------------------------
 
@@ -1221,7 +1342,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 await message.remove_reaction("✅", discord.Object(payload.user_id))
                 return
 
-            await self.end_match(match, game_choice, team_choice)
+            await self.end_match(match, team_choice, game_choice)
 
             # Delete dialog
             await message.delete()
