@@ -5,7 +5,8 @@ Discord bot for prediction tournaments
 Python 3.9+ \
 [discord.py](https://pypi.org/project/discord.py/) \
 [emojis](https://pypi.org/project/emojis/) \
-[asyncpg](https://pypi.org/project/asyncpg//) 
+[asyncpg](https://pypi.org/project/asyncpg/) \
+[colorthief](https://pypi.org/project/colorthief/)
 
 ## Usage
 Set up a PostgreSQL database and create a user and a database on it. \
