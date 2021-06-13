@@ -618,10 +618,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
         team_correct: list[tuple[str, int]],  # (name, score)
         game_correct: Optional[list[tuple[str, int]]] = None,  # (name, score)
     ) -> list[Embed]:
-        def chunks(lst, n):
-            for i in range(0, len(lst), n):
-                yield lst[i : i + n]
-
         if match.result == 1:
             team_winners = await Database.get_team(match.team1, match.guild)
             team_losers = await Database.get_team(match.team2, match.guild)
