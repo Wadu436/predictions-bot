@@ -1,97 +1,29 @@
 import asyncio
-import io
 import math
 import re
-import uuid
 from datetime import datetime, timedelta
+from traceback import print_exc
 from typing import Optional
 
-import colorthief
 import discord
-from discord.abc import Messageable
-from discord.embeds import Embed
-from discord.errors import HTTPException
 from discord.ext import commands, tasks
 
+from src import models
 from src.aiomediawiki.aiomediawiki import APIException, leaguepedia
-from src.aiomediawiki.tables.matchschedule import MatchScheduleRow
 from src.aiomediawiki.tables.teams import TeamsRow
+from src.managers.tournamentmanager import TournamentManager
 from src.utils import decorators
 from src.utils.converters import BestOfXConverter, CodeConverter
-from src.utils.database import Database, Match, Team, Tournament, User, UserMatch
 
 
 # Exceptions
-class TournamentAlreadyRunning(Exception):
-    tournament: Tournament
-
-    def __init__(self, tournament: Tournament):
-        self.tournament = tournament
-        super().__init__()
-
-
-class TournamentAlreadyExists(Exception):
-    tournament: Tournament
-
-    def __init__(self, tournament: Tournament):
-        self.tournament = tournament
-        super().__init__()
-
-
-class TournamentNotRunning(Exception):
-    def __init__(self):
-        super().__init__()
-
-
-class NoTournament(Exception):
+class TournamentException(Exception):
+    tournament: models.Tournament
     reason: str
 
-    def __init__(self, reason: str):
+    def __init__(self, reason):
         self.reason = reason
-        super().__init__()
-
-
-class CantEndTournament(Exception):
-    tournament: Tournament
-    reason: str
-
-    def __init__(self, tournament: Tournament, reason: str):
-        self.tournament = tournament
-        self.reason = reason
-        super().__init__()
-
-
-class MatchAlreadyExists(Exception):
-    match: Match
-
-    def __init__(self, match: Match):
-        self.match = match
-        super().__init__()
-
-
-class CantEndMatch(Exception):
-    match: Match
-    reason: str
-
-    def __init__(self, match: Match, reason: str):
-        self.match = match
-        self.reason = reason
-        super().__init__()
-
-
-class CantCloseMatch(Exception):
-    match: Match
-    reason: str
-
-    def __init__(self, match: Match, reason: str):
-        self.match = match
-        self.reason = reason
-        super().__init__()
-
-
-class MatchDoesntExist(Exception):
-    def __init__(self):
-        super().__init__()
+        super().__init__(reason)
 
 
 class TournamentCog(commands.Cog, name="Tournament"):
@@ -105,9 +37,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
     dialogs: dict[int, int] = {}  # (dialog message, match message)
     # http:// or https://
     link_validation_regex = re.compile(r"^(?:http)s?://", re.IGNORECASE)
+    tournament_manager: TournamentManager
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.tournament_manager = TournamentManager(bot)
         self.update_fandom_matches_task.start()
 
     def cog_unload(self):
@@ -117,19 +51,22 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     @tasks.loop(minutes=5)
     async def update_fandom_matches_task(self):
-        fandom_tournaments = await Database.get_running_fandom_tournaments()
+        fandom_tournaments = await models.Tournament.filter(
+            running=models.TournamentRunningEnum.RUNNING
+        ).exclude(fandom_overview_page="")
         for tournament in fandom_tournaments:
             await self.update_fandom_matches(tournament)
 
-    async def update_fandom_matches(self, tournament: Tournament):
+    async def update_fandom_matches(self, tournament: models.Tournament):
         tabs = await leaguepedia.get_tabs_before(
-            tournament.fandomOverviewPage, datetime.now() + timedelta(days=4)
+            tournament.fandom_overview_page, datetime.now() + timedelta(days=4)
         )
 
         fandommatches = await leaguepedia.get_matches_in_tabs(
-            tournament.fandomOverviewPage,
+            tournament.fandom_overview_page,
             tabs,
         )
+        fandom_match_ids = {m.match_id for m in fandommatches}
 
         any_ended: bool = False
         matchdays_to_close: set[str, int] = {
@@ -138,214 +75,73 @@ class TournamentCog(commands.Cog, name="Tournament"):
             if (fandommatch.start - timedelta(minutes=30)) < datetime.now()
         }
 
+        teams = await models.Team.filter(guild=tournament.guild).exclude(
+            fandom_overview_page=None
+        )
+        teams = {t.fandom_overview_page: t for t in teams}
+
+        db_matches = await models.Match.filter(fandom_match_id__in=fandom_match_ids)
+        db_matches = {m.fandom_match_id: m for m in db_matches}
         for fandommatch in fandommatches:
             # Check if match already exists
-            match = await Database.get_match_by_fandommatchid(
-                fandommatch.match_id, tournament.id
-            )
-            if match is None:
+            if fandommatch.match_id not in db_matches:
                 if fandommatch.winner is None:
                     # Match does not exist yet
-                    team1 = await Database.get_team_by_fandomoverviewpage(
-                        fandommatch.team1, tournament.guild
-                    )
-                    team2 = await Database.get_team_by_fandomoverviewpage(
-                        fandommatch.team2, tournament.guild
-                    )
+                    # team1 = await models.Team.get(
+                    #     fandom_overview_page=fandommatch.team1,
+                    #     guild=tournament.guild,
+                    # )
+                    # team2 = await models.Team.get(
+                    #     fandom_overview_page=fandommatch.team2,
+                    #     guild=tournament.guild,
+                    # )
+                    team1 = teams[fandommatch.team1]
+                    team2 = teams[fandommatch.team2]
+
                     try:
-                        await self.start_match(
-                            tournament=tournament,
+                        await self.tournament_manager.start_match(
+                            tournament,
                             name=f"{fandommatch.tab} Match {fandommatch.n_matchintab}",
                             team1=team1,
                             team2=team2,
                             bestof=fandommatch.best_of,
-                            fandomMatchId=fandommatch.match_id,
+                            fandom_match_id=fandommatch.match_id,
                         )
-                    except Exception:
+                    except Exception as e:
+                        print_exc()
                         pass
-            elif match.running != 0:
-                # Match is running or closed, check if we should close/end it
-                if (
-                    match.running == 1
-                    and (fandommatch.tab, fandommatch.matchday) in matchdays_to_close
-                ):
-                    # Close it
-                    await self.close_match(match)
+            else:
+                match = db_matches[fandommatch.match_id]
+                if match.running != models.MatchRunningEnum.ENDED:
+                    if (
+                        match.running == models.MatchRunningEnum.RUNNING
+                        and (fandommatch.tab, fandommatch.matchday)
+                        in matchdays_to_close
+                        and fandommatch.winner is None
+                    ):
+                        # Match should be closed, but is not over yet (no result)
+                        await self.tournament_manager.close_match(match)
 
-                if fandommatch.winner is not None:
-                    # extra check to make sure it's closed first, but this shouldn't happen normally
-                    if match.running == 1:
-                        await self.close_match(match)
-
-                    any_ended = True
-                    await self.end_match(
-                        match,
-                        fandommatch.winner,
-                        fandommatch.team1_score + fandommatch.team2_score,
-                        update_tournament_message=False,
-                    )
+                    if fandommatch.winner is not None:
+                        # Match is over (there is a result)
+                        any_ended = True
+                        await self.tournament_manager.end_match(
+                            match,
+                            fandommatch.winner,
+                            fandommatch.team1_score + fandommatch.team2_score,
+                            update_tournament_message=False,
+                        )
         if any_ended:
             await self.update_tournament_message(tournament)
 
     # ----------------------------- UTILITY ----------------------------
-
-    async def start_match(
-        self,
-        tournament: Tournament,
-        name: str,
-        team1: Team,
-        team2: Team,
-        bestof: int,
-        fandomMatchId: str = None,
-    ):
-        # Calculate match id
-        id = await Database.get_num_matches(tournament.id) + 1
-
-        channel: discord.abc.Messageable = self.bot.get_channel(tournament.channel)
-        message: discord.Message = await channel.send("A match is starting...")
-
-        # Insert
-        match = Match(
-            id,
-            name,
-            tournament.guild,
-            message.id,
-            1,
-            0,
-            0,
-            team1.code,
-            team2.code,
-            tournament.id,
-            bestof,
-            fandomMatchId,
-        )
-        try:
-            await Database.insert_match(match)
-        except Exception as e:
-            await message.delete()
-            raise e
-
-        await self.update_match_message(match)
-
-        # Add Team reacts
-        await message.add_reaction(self.bot.get_emoji(team1.emoji))
-        await message.add_reaction(self.bot.get_emoji(team2.emoji))
-
-        # Add Games reacts
-        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-
-        if bestof > 1:
-            for i in range(math.floor(bestof / 2), bestof):
-                await message.add_reaction(games_emojis[i])
-
-    async def close_match(
-        self,
-        match: Match,
-    ):
-        usermatches = await self.save_votes(match)
-
-        match.running = 2
-        await Database.insert_usermatches_and_update_match(usermatches, match)
-
-        await self.update_match_message(match)
-
-    async def end_match(
-        self,
-        match: Match,
-        team: int,
-        games: int,
-        update_tournament_message: bool = True,
-    ):
-        match.running = 0
-        match.games = games
-        match.result = team
-        match.__post_init__()  # Refresh winning and losing games
-
-        await Database.update_match(match)
-
-        tournament = await Database.get_tournament(match.tournament)
-        await self.update_match_message(match)
-        if update_tournament_message:
-            await self.update_tournament_message(tournament)
-
-        # Send update message if necesary
-        if tournament.updatesChannel is not None:
-            channel = self.bot.get_channel(tournament.updatesChannel)
-            # get all winning users
-            ums: list[UserMatch] = await Database.get_usermatch_by_match(
-                match.id, match.tournament
-            )
-
-            # TODO: do this in SQL
-            leaderboard = await Database.get_leaderboard(
-                tournament.id, self.score_table
-            )
-            leaderboard_dict = {k: v for (k, v, _, _, _) in leaderboard}
-            team_winners = []
-            for um in ums:
-                if um.team == match.result:
-                    user = await Database.get_user(um.user_id)
-                    team_winners.append((user.name, leaderboard_dict[user.name]))
-            team_winners.sort(key=lambda x: x[0])
-
-            game_winners = None
-            if match.bestof > 1:
-                game_winners = []
-                for um in ums:
-                    if um.games == match.games:
-                        user = await Database.get_user(um.user_id)
-                        game_winners.append((user.name, leaderboard_dict[user.name]))
-                game_winners.sort()
-
-            embeds = await self.construct_match_end_embeds(
-                match, tournament, team_winners, game_winners
-            )
-            for embed in embeds:
-                await channel.send(embed=embed)
-
-            # winning_team = await Database.get_team(
-            #     match.team1 if match.result == 1 else match.team2, tournament.guild
-            # )
-            # losing_team = await Database.get_team(
-            #     match.team2 if match.result == 1 else match.team1, tournament.guild
-            # )
-
-            # msg = f"**{tournament.name} Match {match.id} ({match.name}) has ended!**\n**{winning_team.name}** defeated **{losing_team.name}** by **{match.win_games}-{match.lose_games}**"
-
-            # if len(team_winners) == 0:
-            #     msg += "\n**Noone** predicted the correct team."
-            # elif len(team_winners) == 1:
-            #     msg += f"\n**{team_winners[0]}** predicted the correct team."
-            # elif len(team_winners) == 2:
-            #     msg += f"\n**{team_winners[0]} and {team_winners[1]}** predicted the correct team."
-            # else:
-            #     msg += f"\n**{', '.join(team_winners[:-1])}, and {team_winners[-1]}** predicted the correct team."
-
-            # if match.bestof > 1:
-            #     game_winners: list[str] = []
-            #     for um in ums:
-            #         if um.games == match.games:
-            #             user = await Database.get_user(um.user_id)
-            #             game_winners.append(user.name)
-            #     game_winners.sort()
-
-            #     if len(game_winners) == 0:
-            #         msg += "\n**Noone** predicted the correct amount of games."
-            #     elif len(game_winners) == 1:
-            #         msg += f"\n**{game_winners[0]}** predicted the correct amount of games."
-            #     elif len(game_winners) == 2:
-            #         msg += f"\n**{game_winners[0]} and {game_winners[1]}** predicted the correct amount of games."
-            #     else:
-            #         msg += f"\n**{', '.join(game_winners[:-1])}, and {game_winners[-1]}** predicted the correct amount of games."
-
-            # await channel.send(msg)
 
     async def update_fandom_teams(
         self, tournament_overviewpage: str, guild_id: int
     ) -> bool:
         teams = await leaguepedia.get_teams(tournament_overviewpage)
         guild: discord.Guild = self.bot.get_guild(guild_id)
-        guild_teams = await Database.get_teams_by_guild(guild_id)
+        guild_teams = await models.Team.filter(guild=guild_id)
 
         teams_to_create: list[TeamsRow] = []
 
@@ -354,11 +150,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
             t = discord.utils.get(guild_teams, code=team.short.lower())
             if t is None:
                 teams_to_create.append(team)
-            elif not t.isfandom:
+            elif not t.is_fandom:
                 # Take control of teams with the correct name already
-                t.fandomOverviewPage = team.overviewPage
-                t.isfandom = True
-                await Database.update_team(t.code, t)
+                t.fandom_overview_page = team.overviewPage
+                await t.save()
 
         error = False
 
@@ -374,338 +169,18 @@ class TournamentCog(commands.Cog, name="Tournament"):
             except discord.errors.HTTPException:
                 return True
 
-            await Database.insert_team(
-                Team(
-                    team.name,
-                    team.short.lower(),
-                    emoji.id,
-                    guild_id,
-                    True,
-                    team.overviewPage,
-                )
+            await models.Team.create(
+                name=team.name,
+                code=team.short.lower(),
+                emoji=emoji.id,
+                guild=guild_id,
+                fandom_overview_page=team.overviewPage,
             )
+
             return False
 
         coro_list = [add_team(t) for t in teams_to_create]
-        # for coro in coro_list:
-        #     await coro
-        for f in asyncio.as_completed(coro_list):
-            error = (await f) or error
-
-        return error
-
-    async def save_votes(self, match: Match) -> list[UserMatch]:
-        tournament = await Database.get_tournament(match.tournament)
-        channel = self.bot.get_channel(tournament.channel)
-        message = await channel.fetch_message(match.message)
-        reactions: list[discord.Reaction] = message.reactions
-
-        team1 = await Database.get_team(match.team1, match.guild)
-        team2 = await Database.get_team(match.team2, match.guild)
-
-        team_emojis = [team1.emoji, team2.emoji]
-        games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-        games_emojis = games_emojis[math.floor(match.bestof / 2) : match.bestof]
-
-        user_set = set()
-        team_dict: dict[int, int] = dict()
-        games_dict: dict[int, int] = dict()
-
-        for reaction in reactions:
-            users = await reaction.users().flatten()
-            if reaction.custom_emoji and (reaction.emoji.id in team_emojis):
-                team = team_emojis.index(reaction.emoji.id) + 1
-                for user in users:
-                    if user == self.bot.user:
-                        continue
-                    team_dict[user.id] = team
-                    user_set.add(user)
-            if not reaction.custom_emoji and (reaction.emoji in games_emojis):
-                games = games_emojis.index(reaction.emoji) + math.ceil(match.bestof / 2)
-                for user in users:
-                    if user == self.bot.user:
-                        continue
-                    games_dict[user.id] = games
-                    user_set.add(user)
-
-        usermatches = []
-        for user in user_set:
-            # Update user table
-            db_user = await Database.get_user(user.id)
-            if db_user is not None:
-                if db_user.name != user.name + "#" + user.discriminator:
-                    db_user.name = user.name + "#" + user.discriminator
-                    await Database.update_user(db_user)
-            else:
-                db_user = User(user.id, user.name + "#" + user.discriminator)
-                await Database.insert_user(db_user)
-
-            usermatches.append(
-                UserMatch(
-                    user.id,
-                    match.id,
-                    match.tournament,
-                    team_dict.get(user.id, 0),
-                    games_dict.get(user.id, 0),
-                )
-            )
-        return usermatches
-
-    async def generate_leaderboard(self, tournament: Tournament) -> str:
-        # Leaderboard
-        leaderboard = await Database.get_leaderboard(tournament.id, self.score_table)
-        leaderboard_strings = []
-        rank = 0
-        prev_rank_score = -1
-        players = 0
-
-        rank_size = 0
-        name_size = 0
-        score_size = 0
-        correct_size = 0
-        percent_size = 0
-        entries = []
-
-        if len(leaderboard) > 0:
-            for entry in leaderboard:
-                user_name, user_score, user_correct, user_total, user_percent = entry
-
-                players += 1
-                if prev_rank_score != user_score:
-                    prev_rank_score = user_score
-                    rank = players
-
-                user_correct = f"{user_correct}/{user_total}"
-                user_percent = f"({user_percent:.1f}%)"
-
-                rank_size = max(len(str(rank)), rank_size)
-                name_size = max(len(str(user_name)), name_size)
-                score_size = max(len(str(user_score)), score_size)
-                correct_size = max(len(str(user_correct)), correct_size)
-                percent_size = max(len(str(user_percent)), percent_size)
-
-                entries.append(
-                    [
-                        rank,
-                        user_name,
-                        user_score,
-                        user_correct,
-                        user_percent,
-                    ]
-                )
-
-            for entry in entries:
-                (
-                    rank,
-                    user_name,
-                    user_score,
-                    user_correct,
-                    user_percent,
-                ) = entry
-                leaderboard_strings.append(
-                    f"{rank:>{rank_size}}  -  {user_name:<{name_size}} {user_score:>{score_size}} points  -  {user_correct:>{correct_size}} correct {user_percent:>{percent_size}}"
-                )
-            leaderboard_str = "\n".join(leaderboard_strings)
-        else:
-            leaderboard_str = ""
-        return leaderboard_str
-
-    async def generate_tournament_message(self, tournament: Tournament):
-        channel = self.bot.get_channel(tournament.channel)
-        if channel is None:
-            return ""
-        guild = channel.guild
-
-        teams: dict[str, Team] = dict()
-        for team in await Database.get_teams_by_guild(guild.id):
-            teams[team.code] = team
-
-        # Header
-        content_header = f"**{tournament.name}**"
-        if tournament.isfandom:
-            content_header += f" (<{leaguepedia.wiki_url}{tournament.fandomOverviewPage.replace(' ', '_')}>)"
-        if tournament.running == 0:
-            content_header += f" - Ended"
-        content_header += "\n\n"
-
-        # Scoring table
-        content_scoring_table = f"***Scoring Table***\n```Correct team - BO1: {self.score_table['bo1_team']}\nCorrect team - BO3: {self.score_table['bo3_team']}\tCorrect number of games - BO3: {self.score_table['bo3_games']}\nCorrect team - BO5: {self.score_table['bo5_team']}\tCorrect number of games - BO5: {self.score_table['bo5_games']}```\n"
-
-        leaderboard_str = await self.generate_leaderboard(tournament)
-        if leaderboard_str:
-            content_leaderboard = f"***Leaderboard***\n```c\n{leaderboard_str}```\n"
-        else:
-            content_leaderboard = ""
-
-        # Combine
-        content = (
-            f"{content_header}{content_scoring_table}{content_leaderboard}".strip()
-        )
-
-        return content
-
-    async def generate_match_message(self, match: Match):
-        teams: dict[str, Team] = dict()
-        for team in await Database.get_teams_by_guild(match.guild):
-            teams[team.code] = team
-
-        team1 = teams[match.team1]
-        team1_emoji = self.bot.get_emoji(team1.emoji)
-        team2 = teams[match.team2]
-        team2_emoji = self.bot.get_emoji(team2.emoji)
-
-        match_message_header = f"**{match.id}. {match.name}** - *BO{match.bestof}*"
-        if match.running != 0:
-            if match.running == 2:
-                match_message_header += " - Closed"
-            match_message_footer = (
-                f"{team1_emoji} {team1.name} vs {team2.name} {team2_emoji}"
-            )
-        else:
-            if match.result == 1:
-                match_message_header += (
-                    f" - Result: {match.win_games}-{match.lose_games}"
-                )
-                match_message_footer = (
-                    f"**{team1_emoji} {team1.name}** vs {team2.name} {team2_emoji}"
-                )
-            else:
-                match_message_header += (
-                    f" - Result: {match.lose_games}-{match.win_games}"
-                )
-                match_message_footer = (
-                    f"{team1_emoji} {team1.name} vs **{team2.name} {team2_emoji}**"
-                )
-
-        return match_message_header + "\n" + match_message_footer
-
-    async def update_tournament_message(self, tournament):
-        channel = self.bot.get_channel(tournament.channel)
-        if channel is None:
-            return
-
-        try:
-            message = await channel.fetch_message(tournament.message)
-        except (discord.NotFound, discord.Forbidden):
-            return
-
-        content = await self.generate_tournament_message(tournament)
-
-        await message.edit(content=content)
-
-    async def update_match_message(self, match):
-        tournament: Optional[Tournament] = await Database.get_tournament(
-            match.tournament
-        )
-
-        tournament_channel = self.bot.get_channel(tournament.channel)
-        if tournament_channel is None:
-            return
-
-        try:
-            match_message = await tournament_channel.fetch_message(match.message)
-        except (discord.NotFound, discord.Forbidden):
-            return
-
-        content = await self.generate_match_message(match)
-
-        await match_message.edit(content=content)
-
-    async def construct_match_end_embeds(
-        self,
-        match: Match,
-        tournament: Tournament,
-        team_correct: list[tuple[str, int]],  # (name, score)
-        game_correct: Optional[list[tuple[str, int]]] = None,  # (name, score)
-    ) -> list[Embed]:
-        if match.result == 1:
-            team_winners = await Database.get_team(match.team1, match.guild)
-            team_losers = await Database.get_team(match.team2, match.guild)
-        if match.result == 2:
-            team_winners = await Database.get_team(match.team2, match.guild)
-            team_losers = await Database.get_team(match.team1, match.guild)
-
-        emoji: discord.Emoji = self.bot.get_emoji(team_winners.emoji)
-
-        try:
-            img_bytes = await emoji.url.read()
-        except Exception:
-            img_bytes = None
-
-        embed_color = discord.Colour.blurple()
-        if img_bytes:
-            img = io.BytesIO(img_bytes)
-            color = colorthief.ColorThief(img).get_color(quality=1)
-            embed_color = discord.Colour.from_rgb(*color)
-
-        embeds = []
-
-        base_embed = discord.Embed(
-            title=f"Results: {tournament.name} Match {match.id} ({match.name})",
-            description=f"**{team_winners.name}** defeated **{team_losers.name}** by **{match.win_games}-{match.lose_games}**",
-            colour=embed_color,
-        )
-        base_embed.set_thumbnail(url=emoji.url)
-
-        current_embed: discord.Embed = base_embed.copy()
-        if len(team_correct) > 0:
-            current_embed.add_field(
-                name="**The following player(s) predicted the correct winning team:**",
-                value="\u2800",
-                inline=False,
-            )
-
-            for (name, score) in team_correct:
-                if len(current_embed.fields) == 25:
-                    embeds.append(current_embed)
-                    current_embed = base_embed.copy()
-                    current_embed.add_field(
-                        name="**The following player(s) predicted the correct winning team:**",
-                        value="*Continued*",
-                        inline=False,
-                    )
-
-                current_embed.add_field(name=name, value=f"{score} points")
-        else:
-            current_embed.add_field(
-                name="**Noone predicted the correct team**",
-                value="\u2800",
-                inline=False,
-            )
-
-        if match.bestof != 1:
-            if len(current_embed.fields) > 20:
-                embeds.append(current_embed)
-                current_embed = base_embed.copy()
-
-            if len(game_correct) > 0:
-                current_embed.add_field(
-                    name="**The following player(s) predicted the correct amount of games:**",
-                    value="\u2800",
-                    inline=False,
-                )
-
-                for (name, score) in game_correct:
-                    if len(current_embed.fields) == 25:
-                        embeds.append(current_embed)
-                        current_embed = base_embed.copy()
-                        current_embed.add_field(
-                            name="**The following player(s) predicted the correct amount of games:**",
-                            value="*Continued*",
-                            inline=False,
-                        )
-
-                    current_embed.add_field(name=name, value=f"{score} points")
-            else:
-                current_embed.add_field(
-                    name="**Noone predicted the correct amount of games**",
-                    value="\u2800",
-                    inline=False,
-                )
-
-        embeds.append(current_embed)
-
-        return embeds
+        return any(await asyncio.gather(*coro_list))
 
     # ----------------------------- GROUPS -----------------------------
 
@@ -743,10 +218,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
     async def tournament_start(self, ctx: commands.Context, *, name_or_link: str):
-        tournament = await Database.get_running_tournament(ctx.channel.id)
         # Check if tournament already running
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
         if tournament is not None:
-            raise TournamentAlreadyRunning(tournament)
+            raise TournamentException(
+                f"There is already a running tournament in this channel: {tournament}. You can only have one running tournament per channel."
+            )
 
         # Check if argument is a name or a link
         is_link = re.match(self.link_validation_regex, name_or_link) is not None
@@ -771,72 +251,54 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 return
             page_title = page_info["title"]
 
-            fandomTournament = await leaguepedia.get_tournament(page_title)
-            if not fandomTournament:
+            fandom_tournament = await leaguepedia.get_tournament(page_title)
+            if not fandom_tournament:
                 await ctx.send(f"This is not a tournament overview page.")
                 return
 
-            tournament_name = fandomTournament.name
+            tournament_name = fandom_tournament.name
 
         # We have verified the tournament can be started
         async with ctx.typing():
+            fandom_overview_page = None
             if is_link:
-                message: discord.Message = await ctx.send("Adding teams...")
-
                 error = await self.update_fandom_teams(
-                    fandomTournament.overviewPage,
+                    fandom_tournament.overviewPage,
                     ctx.guild.id,
                 )
 
                 if error:
-                    await message.edit(
-                        content="There was an error while creating the teams. Perhaps the bot doesn't have permission to create new emoji or there aren't any emote slots left."
+                    await ctx.send(
+                        content="There was an error while creating the teams participating in this tournament. Perhaps the bot doesn't have permission to create new emoji or there aren't any emote slots left.",
                     )
                     return
 
-                await message.edit(content="Tournament is starting...")
-            else:
-                message: discord.Message = await ctx.send("Tournament is starting...")
+                fandom_overview_page = fandom_tournament.overviewPage
 
             # Check if tournament by this name already exists
             # If yes, add a number behind it
             base_name = tournament_name
             i = 1
-            tournament = await Database.get_tournament_by_name(
-                tournament_name,
-                ctx.guild.id,
+            tournament = await models.Tournament.get_or_none(
+                name=tournament_name, guild=ctx.guild.id
             )
             while tournament:
                 tournament_name = base_name + f" ({i})"
                 i += 1
-                tournament = await Database.get_tournament_by_name(
-                    tournament_name,
-                    ctx.guild.id,
+                tournament = await models.Tournament.get_or_none(
+                    name=tournament_name, guild=ctx.guild.id
                 )
 
-            tournament = Tournament(
-                uuid.uuid4(),
+            tournament = await self.tournament_manager.start_tournament(
                 tournament_name,
                 ctx.channel.id,
                 ctx.guild.id,
-                message.id,
-                1,
+                fandom_overview_page,
             )
 
-            if is_link:
-                tournament.isfandom = True
-                tournament.fandomOverviewPage = fandomTournament.overviewPage
-
-            try:
-                await Database.insert_tournament(tournament)
-            except Exception as e:
-                await message.delete()
-                raise e
-            await self.update_tournament_message(tournament)
             await ctx.message.delete()
 
-            if tournament.isfandom:
-                # Create matches and stuff
+            if tournament.is_fandom:
                 await self.update_fandom_matches(tournament)
 
     @tournament_group.command(
@@ -850,24 +312,35 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.has_permissions(manage_messages=True)
     async def tournament_end(self, ctx):
         # Check if tournament running
-        tournament = await Database.get_running_tournament(ctx.channel.id)
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
         if tournament is None:
-            raise TournamentNotRunning
+            raise TournamentException("There is no running tournament in this channel.")
 
         # Check if there are still matches not ended
-        running_matches = await Database.get_matches_by_state(tournament.id, 1)
-        closed_matches = await Database.get_matches_by_state(tournament.id, 2)
+        running_matches_count = await models.Match.filter(
+            tournament=tournament,
+            running=models.MatchRunningEnum.RUNNING,
+        ).count()
+        closed_matches_count = await models.Match.filter(
+            tournament=tournament,
+            running=models.MatchRunningEnum.CLOSED,
+        ).count()
 
-        if len(running_matches) > 0:
-            raise CantEndTournament(tournament, "There are still open matches")
+        if running_matches_count > 0:
+            raise TournamentException(
+                f"Could not end tournament {tournament} (There are still open matches.)"
+            )
 
-        if len(closed_matches) > 0:
-            raise CantEndTournament(tournament, "There are still closed matches")
+        if closed_matches_count > 0:
+            raise TournamentException(
+                f"Could not end tournament {tournament} (There are still closed matches.)"
+            )
 
-        tournament.running = 0
-        await Database.update_tournament(tournament)
+        await self.tournament_manager.end_tournament(tournament)
 
-        await self.update_tournament_message(tournament)
         await ctx.send(f"Tournament **{tournament.name}** ended.")
         await ctx.message.delete()
 
@@ -881,17 +354,23 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.guild_only()
     async def tournament_show(self, ctx, *, name: Optional[str]):
         if name is not None:
-            tournament = await Database.get_tournament_by_name(name, ctx.guild.id)
-            txt = "No tournament with this name exists in this guild."
+            tournament = await models.Tournament.get_or_none(
+                name=name,
+                guild=ctx.guild.id,
+            )
+            txt = "There is no tournament with this name in this guild."
         else:
-            tournament = await Database.get_running_tournament(ctx.channel.id)
-            txt = "No tournament is running in this channel."
+            tournament = await models.Tournament.get_or_none(
+                channel=ctx.channel.id,
+                running=models.TournamentRunningEnum.RUNNING,
+            )
+            txt = "There is no running tournament in this channel."
 
         # Check if tournament exists
         if tournament is None:
-            raise NoTournament(txt)
+            raise TournamentException(f"Could not find tournament ({txt})")
 
-        content = await self.generate_tournament_message(tournament)
+        content = await self.tournament_manager.generate_tournament_text(tournament)
         await ctx.send(content + "\n`This message does not get updated.`")
 
     @tournament_group.command(
@@ -903,15 +382,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
     async def tournament_updates(self, ctx, *, name: str):
-        tournament = await Database.get_tournament_by_name(name, ctx.guild.id)
-        txt = "No tournament with this name exists in this guild."
+        tournament = await models.Tournament.get_or_none(
+            name=name,
+            guild=ctx.guild.id,
+        )
 
         # Check if tournament exists
         if tournament is None:
-            raise NoTournament(txt)
+            raise TournamentException(
+                "Could not find tournament (There is no tournament with that name in this server.)"
+            )
 
-        tournament.updatesChannel = ctx.channel.id
-        await Database.update_tournament(tournament)
+        tournament.updates_channel = ctx.channel.id
+        await tournament.save()
         await ctx.send(
             f"This channel will now display updates on the tournament {tournament.name}."
         )
@@ -925,9 +408,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     )
     @commands.guild_only()
     async def tournament_list(self, ctx: commands.Context):
-        tournaments: list[Tournament] = await Database.get_tournaments_by_guild(
-            ctx.guild.id
-        )
+        tournaments = await models.Tournament.filter(guild=ctx.guild.id)
 
         paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
 
@@ -935,8 +416,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             paginator.add_line("**Tournaments:**")
             for tournament in tournaments:
                 channel: discord.Channel = self.bot.get_channel(tournament.channel)
-                line = f"{tournament.name} - Channel: {channel.mention}"
-                if tournament.running == 0:
+                line = f"**{tournament.name}** - Channel: {channel.mention}"
+                if tournament.running == models.TournamentRunningEnum.ENDED:
                     line += " - Ended"
                 paginator.add_line(line)
         else:
@@ -964,105 +445,128 @@ class TournamentCog(commands.Cog, name="Tournament"):
         bestof: BestOfXConverter,
     ):
         # Check if tournament running
-        tournament = await Database.get_running_tournament(ctx.channel.id)
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
+        )
         if tournament is None:
-            raise TournamentNotRunning()
+            raise TournamentException(
+                "There is no  running tournament in this channel."
+            )
 
-        team1: Optional[Team] = await Database.get_team(team1_code, ctx.guild.id)
-        team2: Optional[Team] = await Database.get_team(team2_code, ctx.guild.id)
+        team1 = await models.Team.get(code=team1_code, guild=ctx.guild.id)
+        team2 = await models.Team.get(code=team2_code, guild=ctx.guild.id)
 
-        await self.start_match(tournament, name.strip(), team1, team2, bestof)
+        await self.tournament_manager.start_match(
+            tournament,
+            name.strip(),
+            bestof,
+            team1,
+            team2,
+        )
 
         await ctx.message.delete()
 
     @match_group.command(
         name="close",
         brief="Closes predictions for a match.",
-        description='Closes predictions on the specified matches.\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces',
+        description='Closes predictions on the specified matches.\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces\n-You can also specify a range of match ids with a - (e.g. 22-24 would mean ids 22, 23 and 23)',
         aliases=["c"],
         usage="<ids>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def match_close(self, ctx, *ids: int):
+    async def match_close(self, ctx, *ids_string: str):
         # Validate input
         # Check if tournament running
-        tournament = await Database.get_running_tournament(ctx.channel.id)
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
+        )
         if tournament is None:
-            raise TournamentNotRunning()
+            raise TournamentException("There is no running tournament in this channel.")
 
-        errors = []
-        for id in ids:
-            # Is name a running match
-            match = await Database.get_match(id, tournament.id)
-            if match is None:
-                errors += [f"Match with id {id} does not exist."]
-                continue
-            if match.running != 1:
-                errors += [f"Match with id {id} is not an open match."]
-                continue
+        ids = []
+        for id_string in ids_string:
+            if id_string.isdigit():
+                ids.append(int(id_string))
+            else:
+                s = id_string.split(sep="-")
+                if len(s) == 2 and s[0].isdigit() and s[1].isdigit():
+                    start = int(s[0])
+                    stop = int(s[1]) + 1
+                    ids.extend(list(range(start, stop)))
 
-            await self.close_match(match)
-        if errors:
-            await ctx.send("\n".join(errors))
+        matches = await models.Match.filter(
+            tournament=tournament,
+            id_in_tournament__in=ids,
+            running=models.MatchRunningEnum.RUNNING,
+        )
+
+        coro_list = [self.tournament_manager.close_match(match) for match in matches]
+        asyncio.gather(*coro_list)
         await ctx.message.delete()
 
     @match_group.command(
         name="end",
         brief="Ends a match.",
-        description='Ends the match.\n\nArguments:\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces',
+        description='Ends the match.\n\nArguments:\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces-You can also specify a range of match ids with a - (e.g. 22-24 would mean ids 22, 23 and 23)',
         aliases=["e"],
         usage="<ids>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def match_end(self, ctx, *ids: int):
+    async def match_end(self, ctx, *ids_string: str):
         # Validate input
         # Check if tournament running
-        tournament = await Database.get_running_tournament(ctx.channel.id)
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
+        )
         if tournament is None:
-            raise TournamentNotRunning()
+            raise TournamentException("There is no running tournament in this channel.")
 
-        for id in ids:
-            # Is reference a running or closed match
-            match = await Database.get_match(id, tournament.id)
-            if match is None:
-                raise MatchDoesntExist()
-            if match.running not in (1, 2):
-                raise CantEndMatch(match, "This match has already ended.")
+        ids = []
+        for id_string in ids_string:
+            if id_string.isdigit():
+                ids.append(int(id_string))
+            else:
+                s = id_string.split(sep="-")
+                if len(s) == 2 and s[0].isdigit() and s[1].isdigit():
+                    start = int(s[0])
+                    stop = int(s[1]) + 1
+                    ids.extend(list(range(start, stop)))
 
-            if match.running == 1:
-                await self.close_match(match)
+        matches = await models.Match.filter(
+            tournament=tournament,
+            id_in_tournament__in=ids,
+            running__not=models.MatchRunningEnum.ENDED,
+        ).select_related("team1", "team2")
 
-            # Check if dialog already exists
-            if match.message in self.dialogs.values():
-                await ctx.send("This match is already being ended!")
-                return
+        for match in matches:
+            if match.running == models.MatchRunningEnum.RUNNING:
+                await self.tournament_manager.close_match(match)
+            if match.message not in self.dialogs.values():
+                txt = f'**Match End:** Which team won in match {match.id_in_tournament} "{match.name}"'
+                if match.bestof > 1:
+                    txt += " and in how many games"
+                txt += "? Press ✅ after you're done to end the match."
+                message: discord.Message = await ctx.send(txt)
 
-            # Create dialog message
-            txt = f'**Match End:** Which team won in match {match.id} "{match.name}"'
-            if match.bestof > 1:
-                txt += " and in how many games"
-            txt += "? Press ✅ after you're done to end the match."
-            message: discord.Message = await ctx.send(txt)
+                self.dialogs[message.id] = match.message
 
-            self.dialogs[message.id] = match.message
+                # Add Team reacts
+                await message.add_reaction(self.bot.get_emoji(match.team1.emoji))
+                await message.add_reaction(self.bot.get_emoji(match.team2.emoji))
 
-            team1 = await Database.get_team(match.team1, tournament.guild)
-            team2 = await Database.get_team(match.team2, tournament.guild)
+                # Add Games reacts
+                games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
-            # Add Team reacts
-            await message.add_reaction(self.bot.get_emoji(team1.emoji))
-            await message.add_reaction(self.bot.get_emoji(team2.emoji))
+                if match.bestof > 1:
+                    for i in range(math.floor(match.bestof / 2), match.bestof):
+                        await message.add_reaction(games_emojis[i])
 
-            # Add Games reacts
-            games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-
-            if match.bestof > 1:
-                for i in range(math.floor(match.bestof / 2), match.bestof):
-                    await message.add_reaction(games_emojis[i])
-
-            await message.add_reaction("✅")
+                await message.add_reaction("✅")
 
         await ctx.message.delete()
 
@@ -1075,17 +579,25 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @commands.guild_only()
     @commands.is_owner()
     async def match_fix(self, ctx: commands.Context, *, id: int):
-        tournament: Optional[Tournament] = await Database.get_running_tournament(
-            ctx.channel.id
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
         )
         if tournament is None:
-            raise TournamentNotRunning()
+            raise TournamentException("There is no running tournament in this channel.")
 
-        match: Optional[Match] = await Database.get_match(id, tournament.id)
+        match = (
+            await models.Match.filter(
+                id_in_tournament=id,
+                tournament=tournament,
+            )
+            .select_related("team1", "team2")
+            .first()
+        )
         if match is None:
-            raise MatchDoesntExist()
+            raise TournamentException("This match does not exist")
 
-        if match.running == 1:
+        if match.running == models.MatchRunningEnum.RUNNING:
             # Fix emoji
             message: discord.Message = await ctx.channel.fetch_message(match.message)
 
@@ -1093,11 +605,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 if reaction.me:
                     await reaction.remove(self.bot.user)
 
-            team1: Optional[Team] = await Database.get_team(match.team1, match.guild)
-            team2: Optional[Team] = await Database.get_team(match.team2, match.guild)
-
-            await message.add_reaction(self.bot.get_emoji(team1.emoji))
-            await message.add_reaction(self.bot.get_emoji(team2.emoji))
+            await message.add_reaction(self.bot.get_emoji(match.team1.emoji))
+            await message.add_reaction(self.bot.get_emoji(match.team2.emoji))
 
             # Add Games reacts
             games_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
@@ -1107,7 +616,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     await message.add_reaction(games_emojis[i])
 
         # Fix name
-        await self.update_match_message(match)
+        await self.tournament_manager.update_match_message(match)
 
     @match_group.command(
         name="list",
@@ -1118,31 +627,35 @@ class TournamentCog(commands.Cog, name="Tournament"):
     )
     @commands.guild_only()
     async def matches_list(self, ctx, *, name: Optional[str]):
-        tournament: Tournament
-        if name is None:
-            tournament = await Database.get_running_tournament(ctx.channel.id)
-            if tournament is None:
-                raise TournamentNotRunning()
-        else:
-            tournament: Tournament = await Database.get_tournament_by_name(
-                name, ctx.guild.id
+        if name is not None:
+            tournament = await models.Tournament.get_or_none(
+                name=name,
+                guild=ctx.guild.id,
             )
-            if tournament is None:
-                raise NoTournament("No tournament by that name exists in this server.")
+            txt = "There is no tournament with this name in this guild."
+        else:
+            tournament = await models.Tournament.get_or_none(
+                channel=ctx.channel.id,
+                running=models.TournamentRunningEnum.RUNNING,
+            )
+            txt = "There is no running tournament in this channel."
 
-        teams: dict[str, Team] = dict()
-        for team in await Database.get_teams_by_guild(tournament.guild):
-            teams[team.code] = team
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(txt)
 
-        past_matches: list[Match] = await Database.get_matches_by_state(
-            tournament.id, 0
-        )
-        closed_matches: list[Match] = await Database.get_matches_by_state(
-            tournament.id, 2
-        )
-        active_matches: list[Match] = await Database.get_matches_by_state(
-            tournament.id, 1
-        )
+        past_matches = await models.Match.filter(
+            tournament=tournament,
+            running=models.MatchRunningEnum.ENDED,
+        ).prefetch_related("team1", "team2")
+        closed_matches = await models.Match.filter(
+            tournament=tournament,
+            running=models.MatchRunningEnum.CLOSED,
+        ).prefetch_related("team1", "team2")
+        active_matches = await models.Match.filter(
+            tournament=tournament,
+            running=models.MatchRunningEnum.RUNNING,
+        ).prefetch_related("team1", "team2")
 
         paginator = commands.Paginator(max_size=2000, prefix="", suffix="")
         paginator.add_line(f"***{tournament.name} Matches***")
@@ -1152,14 +665,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
             paginator.add_line(f"**Ended Matches:**")
             past_matches.sort(key=lambda x: x.id)
             for match in past_matches:
-                team1 = teams[match.team1]
-                team2 = teams[match.team2]
+                team1: models.Team = match.team1
+                team2: models.Team = match.team2
                 team1_emoji = self.bot.get_emoji(team1.emoji)
                 team2_emoji = self.bot.get_emoji(team2.emoji)
                 if match.result == 1:
-                    match_content = f"{match.id}. {match.name}: **{team1_emoji} {team1.name}** vs {team2.name} {team2_emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
+                    match_content = f"{match.id_in_tournament}. {match.name}: **{team1_emoji} {team1.name}** vs {team2.name} {team2_emoji} - BO{match.bestof} - Result: {match.win_games}-{match.lose_games}"
                 elif match.result == 2:
-                    match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs **{team2.name} {team2_emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
+                    match_content = f"{match.id_in_tournament}. {match.name}: {team1_emoji} {team1.name} vs **{team2.name} {team2_emoji}** - BO{match.bestof} - Result: {match.lose_games}-{match.win_games}"
                 paginator.add_line(match_content)
 
         if closed_matches:
@@ -1167,22 +680,22 @@ class TournamentCog(commands.Cog, name="Tournament"):
             paginator.add_line(f"**Closed Matches:**")
             closed_matches.sort(key=lambda x: x.id)
             for match in closed_matches:
-                team1 = teams[match.team1]
-                team2 = teams[match.team2]
+                team1: models.Team = match.team1
+                team2: models.Team = match.team2
                 team1_emoji = self.bot.get_emoji(team1.emoji)
                 team2_emoji = self.bot.get_emoji(team2.emoji)
-                match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
+                match_content = f"{match.id_in_tournament}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
         if active_matches:
             paginator.add_line("")
             paginator.add_line(f"**Open Matches:**")
             active_matches.sort(key=lambda x: x.id)
             for match in active_matches:
-                team1 = teams[match.team1]
-                team2 = teams[match.team2]
+                team1: models.Team = match.team1
+                team2: models.Team = match.team2
                 team1_emoji = self.bot.get_emoji(team1.emoji)
                 team2_emoji = self.bot.get_emoji(team2.emoji)
-                match_content = f"{match.id}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
+                match_content = f"{match.id_in_tournament}. {match.name}: {team1_emoji} {team1.name} vs {team2.name} {team2_emoji} - BO{match.bestof}"
                 paginator.add_line(match_content)
 
         if not (past_matches or closed_matches or active_matches):
@@ -1190,13 +703,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         for page in paginator.pages:
             await ctx.send(page)
-
-    @commands.command(
-        name="debug",
-    )
-    @commands.guild_only()
-    async def debug(self, ctx):
-        pass
 
     # ----------------------------- EVENTS -----------------------------
 
@@ -1209,20 +715,21 @@ class TournamentCog(commands.Cog, name="Tournament"):
             return False
 
         # Check if message is a match or in dialogs
-        match: Optional[Match] = await Database.get_match_by_message(payload.message_id)
-        if match is not None and match.running == 1:
+        match = (
+            await models.Match.filter(message=payload.message_id)
+            .select_related("team1", "team2")
+            .first()
+        )
+        if match is not None and match.running == models.MatchRunningEnum.RUNNING:
             # Fetch channel and message
             channel = self.bot.get_channel(payload.channel_id)
             message: discord.Message = await channel.fetch_message(payload.message_id)
-
-            team1: Optional[Team] = await Database.get_team(match.team1, match.guild)
-            team2: Optional[Team] = await Database.get_team(match.team2, match.guild)
 
             to_remove = set()
             emoji: discord.PartialEmoji = payload.emoji
 
             # Team
-            team_emoji = {team1.emoji, team2.emoji}
+            team_emoji = {match.team1.emoji, match.team2.emoji}
             if emoji.id in team_emoji:
                 team_emoji.remove(emoji.id)
                 to_remove.update({str(self.bot.get_emoji(e)) for e in team_emoji})
@@ -1246,23 +753,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     return
                 await reaction.remove(discord.Object(payload.user_id))
 
-            reaction_users = []
-            for f in asyncio.as_completed(
-                [
-                    reaction_get_users(r)
-                    for r in message.reactions
-                    if str(r.emoji) in to_remove
-                ]
-            ):
-                reaction_users.append(await f)
+            coro_list = [
+                reaction_get_users(r)
+                for r in message.reactions
+                if str(r.emoji) in to_remove
+            ]
+            reaction_users = await asyncio.gather(*coro_list)
 
             coro_list = [
                 remove_reaction(r)
                 for (r, u_id) in reaction_users
                 if payload.user_id in u_id
             ]
-            for f in asyncio.as_completed(coro_list):
-                await f
+            await asyncio.gather(*coro_list)
 
         # Check if message is a dialog message
         if (payload.message_id in self.dialogs.keys()) and (str(payload.emoji) == "✅"):
@@ -1281,12 +784,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
             # End match
 
             # Fetch match
-            match: Optional[Match] = await Database.get_match_by_message(
-                self.dialogs[payload.message_id]
+            match = (
+                await models.Match.filter(message=self.dialogs[payload.message_id])
+                .select_related("team1", "team2")
+                .first()
             )
-
-            team1: Optional[Team] = await Database.get_team(match.team1, match.guild)
-            team2: Optional[Team] = await Database.get_team(match.team2, match.guild)
 
             # Find choices
             team_choice = 0
@@ -1301,11 +803,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 game_choice = 0
 
             for r in message.reactions:
-                if r.custom_emoji and r.emoji.id in [team1.emoji, team2.emoji]:
+                if r.custom_emoji and r.emoji.id in [
+                    match.team1.emoji,
+                    match.team2.emoji,
+                ]:
                     react_user = await r.users().get(id=payload.user_id)
                     if react_user is not None:
                         if team_choice == 0:
-                            if r.emoji.id == team1.emoji:
+                            if r.emoji.id == match.team1.emoji:
                                 team_choice = 1  # team 1
                             else:
                                 team_choice = 2  # team 2
@@ -1338,7 +843,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 await message.remove_reaction("✅", discord.Object(payload.user_id))
                 return
 
-            await self.end_match(match, team_choice, game_choice)
+            await self.tournament_manager.end_match(match, team_choice, game_choice)
 
             # Delete dialog
             await message.delete()
@@ -1348,29 +853,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
         message = ""
 
         if isinstance(error, commands.CommandInvokeError):
-            if isinstance(error.original, TournamentAlreadyExists):
-                message = f"A tournament with the name {error.original.tournament.name} already exists."
-            if isinstance(error.original, TournamentAlreadyRunning):
-                message = f"There is already a running tournament in this channel. You can only have one running tournament per channel."
-            if isinstance(error.original, TournamentNotRunning):
-                message = "No tournament is running."
-            if isinstance(error.original, CantEndTournament):
-                message = f"Could not end tournament {error.original.tournament.name} ({error.original.reason})."
-            if isinstance(error.original, NoTournament):
-                message = f"Could not find tournament ({error.original.reason})."
-            if isinstance(error.original, MatchAlreadyExists):
-                message = f'A match with the name "{error.original.match.name}" already exists.'
-            if isinstance(error.original, MatchDoesntExist):
-                message = f"No match was found (Maybe you made a typo in the name)."
-            if isinstance(error.original, CantEndMatch):
-                message = f'Could not end match "{error.original.match.name}" ({error.original.reason}).'
-            if isinstance(error.original, CantCloseMatch):
-                message = f'Could not close match "{error.original.match.name}" ({error.original.reason}).'
+            if isinstance(error.original, TournamentException):
+                message = f"ERROR: {error.original.reason}"
 
         if len(message) > 0:
             await ctx.send(f"`{message}`")
             ctx.handled = True
-            return
 
 
 def setup(bot):
