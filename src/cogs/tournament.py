@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands, tasks
 
 from src import models
-from src.aiomediawiki.aiomediawiki import APIException, leaguepedia
+from src.aiomediawiki.aiomediawiki import APIException, ServerException, leaguepedia
 from src.aiomediawiki.tables.teams import TeamsRow
 from src.managers.tournamentmanager import TournamentManager
 from src.utils import decorators
@@ -42,6 +42,9 @@ class TournamentCog(commands.Cog, name="Tournament"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.tournament_manager = TournamentManager(bot)
+        self.update_fandom_matches_task.add_exception_type(
+            APIException, ServerException
+        )
         self.update_fandom_matches_task.start()
 
     def cog_unload(self):
@@ -49,7 +52,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     # ------------------------------ TASKS -----------------------------
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(seconds=10, reconnect=True)
     async def update_fandom_matches_task(self):
         fandom_tournaments = await models.Tournament.filter(
             running=models.TournamentRunningEnum.RUNNING
@@ -59,7 +62,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     async def update_fandom_matches(self, tournament: models.Tournament):
         tabs = await leaguepedia.get_tabs_before(
-            tournament.fandom_overview_page, datetime.now(tz=timezone.utc) + timedelta(days=4)
+            tournament.fandom_overview_page,
+            datetime.now(tz=timezone.utc) + timedelta(days=4),
         )
 
         fandommatches = await leaguepedia.get_matches_in_tabs(
@@ -72,7 +76,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         matchdays_to_close: set[str, int] = {
             (fandommatch.tab, fandommatch.matchday)
             for fandommatch in fandommatches
-            if (fandommatch.start - timedelta(minutes=30)) < datetime.now(tz=timezone.utc)
+            if (fandommatch.start - timedelta(minutes=30))
+            < datetime.now(tz=timezone.utc)
         }
 
         teams = await models.Team.filter(guild=tournament.guild).exclude(
