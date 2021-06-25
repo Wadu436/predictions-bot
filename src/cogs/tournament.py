@@ -132,7 +132,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                             update_tournament_message=False,
                         )
         if any_ended:
-            await self.update_tournament_message(tournament)
+            await self.tournament_manager.update_tournament_message(tournament)
 
     # ----------------------------- UTILITY ----------------------------
 
