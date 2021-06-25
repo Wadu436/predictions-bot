@@ -87,6 +87,7 @@ class TournamentManager:
         return content
 
     async def generate_match_text(self, match: models.Match):
+        await match.fetch_related("team1", "team2")
         team1_emoji = self.client.get_emoji(match.team1.emoji)
         team2_emoji = self.client.get_emoji(match.team2.emoji)
 
