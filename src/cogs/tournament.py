@@ -1,7 +1,7 @@
 import asyncio
 import math
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from traceback import print_exc
 from typing import Optional
 
@@ -59,7 +59,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     async def update_fandom_matches(self, tournament: models.Tournament):
         tabs = await leaguepedia.get_tabs_before(
-            tournament.fandom_overview_page, datetime.now() + timedelta(days=4)
+            tournament.fandom_overview_page, datetime.now(tz=timezone.utc) + timedelta(days=4)
         )
 
         fandommatches = await leaguepedia.get_matches_in_tabs(
@@ -72,7 +72,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         matchdays_to_close: set[str, int] = {
             (fandommatch.tab, fandommatch.matchday)
             for fandommatch in fandommatches
-            if (fandommatch.start - timedelta(minutes=30)) < datetime.now()
+            if (fandommatch.start - timedelta(minutes=30)) < datetime.now(tz=timezone.utc)
         }
 
         teams = await models.Team.filter(guild=tournament.guild).exclude(
