@@ -52,7 +52,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
     # ------------------------------ TASKS -----------------------------
 
-    @tasks.loop(seconds=10, reconnect=True)
+    @tasks.loop(minutes=5, reconnect=True)
     async def update_fandom_matches_task(self):
         fandom_tournaments = await models.Tournament.filter(
             running=models.TournamentRunningEnum.RUNNING
