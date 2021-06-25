@@ -282,14 +282,17 @@ class Leaguepedia(Site):
         overviewpage: str,
         tabs: list[str],
     ) -> list[MatchScheduleRow]:
-        tab_comp = [f"Tab='{t}'" for t in tabs]
-        result = await self.cargo_query(
-            tables=MatchScheduleRow.table,
-            fields=_fields_to_query(MatchScheduleRow.fields),
-            where=f"OverviewPage='{overviewpage}' AND ({' OR '.join(tab_comp)})",
-            order_by="DateTime_UTC",
-        )
-        return [MatchScheduleRow.from_row(row) for row in result]
+        if len(tabs) > 0:
+            tab_comp = [f"Tab='{t}'" for t in tabs]
+            result = await self.cargo_query(
+                tables=MatchScheduleRow.table,
+                fields=_fields_to_query(MatchScheduleRow.fields),
+                where=f"OverviewPage='{overviewpage}' AND ({' OR '.join(tab_comp)})",
+                order_by="DateTime_UTC",
+            )
+            return [MatchScheduleRow.from_row(row) for row in result]
+        else:
+            return []
 
     async def get_tabs_before(
         self,
