@@ -4,20 +4,18 @@ from pathlib import Path
 import config
 import src.bot
 
-persistPath = Path.cwd() / "persistent"
-persistPath.mkdir(parents=True, exist_ok=True)
+log_handlers = [logging.StreamHandler()]
 
-logPath = persistPath / "bot.log"
+logfile = getattr(config, "logfile", None)
+if logfile:
+    log_handlers.append(logging.FileHandler(Path.cwd() / logfile))
 
 logging.basicConfig(
     level=getattr(config, "logging_level", logging.INFO),
     style="{",
     format="{asctime:19s} [{levelname:8s}] {message}",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.FileHandler(logPath),
-        logging.StreamHandler(),
-    ],
+    handlers=log_handlers,
 )
 
 
