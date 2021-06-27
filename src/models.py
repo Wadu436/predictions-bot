@@ -50,6 +50,8 @@ class Team(UUIDPrimaryKeyModel):
     matches_team1: fields.ReverseRelation["Match"]
     matches_team2: fields.ReverseRelation["Match"]
 
+    # bot_created: fields.BooleanField(default=False)
+
     @property
     def is_fandom(self) -> bool:
         return self.fandom_overview_page is not None

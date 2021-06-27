@@ -248,10 +248,7 @@ def launch():
     # Initialize Database
     async def async_main():
         logging.info("Initializing Database connection")
-        await Tortoise.init(
-            db_url=config.database,
-            modules={"models": ["src.models"]},
-        )
+        await Tortoise.init(config=config.TORTOISE_ORM)
 
         # Start bot
         logging.info("Starting bot")
