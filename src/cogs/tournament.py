@@ -92,7 +92,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
         )
         teams = {t.fandom_overview_page: t for t in teams}
 
-        db_matches = await models.Match.filter(fandom_match_id__in=fandom_match_ids)
+        db_matches = await models.Match.filter(
+            fandom_match_id__in=fandom_match_ids,
+            tournament=tournament,
+        )
         db_matches = {m.fandom_match_id: m for m in db_matches}
         for fandommatch in fandommatches:
             # Check if match already exists
