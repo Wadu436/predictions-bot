@@ -94,9 +94,7 @@ class TournamentManager:
         str_list_header = []
         str_list_footer = []
 
-        str_list_header.append(
-            f"**{match.id_in_tournament}. {match.name}** - *BO{match.bestof}*"
-        )
+        str_list_header.append(f"{match.id_in_tournament}. {match.name}")
         if match.running == models.MatchRunningEnum.CLOSED:
             str_list_header.append(" - Closed")
         elif match.running == models.MatchRunningEnum.ENDED:
@@ -113,12 +111,14 @@ class TournamentManager:
                 str_list_header[2] = str(match.win_games)
                 str_list_header[4] = str(match.lose_games)
 
-                str_list_footer[0] = f"**{str_list_footer[0]}**"
+                str_list_footer[0] = f"{team1_emoji} **{match.team1.name}**"
+                str_list_footer[2] = f"~~{match.team2.name}~~ {team2_emoji}"
             else:
                 str_list_header[4] = str(match.win_games)
                 str_list_header[2] = str(match.lose_games)
 
-                str_list_footer[2] = f"**{str_list_footer[0]}**"
+                str_list_footer[0] = f"{team1_emoji} ~~{match.team1.name}~~"
+                str_list_footer[2] = f"**{match.team2.name}** {team2_emoji}"
 
         return "".join(str_list_header) + "\n" + "".join(str_list_footer)
 
