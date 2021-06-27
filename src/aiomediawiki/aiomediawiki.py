@@ -189,6 +189,8 @@ class Site:
                 attempts += 1
                 continue
 
+            break
+
         if "error" in response_dict:
             logging.error(
                 f"APIException from following query: {query_url}, done retrying."
