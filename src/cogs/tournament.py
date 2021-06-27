@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import math
 import re
 from datetime import datetime, timedelta, timezone
@@ -45,20 +46,26 @@ class TournamentCog(commands.Cog, name="Tournament"):
         self.update_fandom_matches_task.add_exception_type(
             APIException, ServerException
         )
-        self.update_fandom_matches_task.start()
 
     def cog_unload(self):
         self.update_fandom_matches_task.stop()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logging.debug("Starting Fandom task.")
+        self.update_fandom_matches_task.start()
 
     # ------------------------------ TASKS -----------------------------
 
     @tasks.loop(minutes=5, reconnect=True)
     async def update_fandom_matches_task(self):
+        logging.debug("Running Fandom task.")
         fandom_tournaments = await models.Tournament.filter(
             running=models.TournamentRunningEnum.RUNNING
         ).exclude(fandom_overview_page="")
         for tournament in fandom_tournaments:
             await self.update_fandom_matches(tournament)
+        logging.debug("Fandom task done.")
 
     async def update_fandom_matches(self, tournament: models.Tournament):
         tabs = await leaguepedia.get_tabs_before(
