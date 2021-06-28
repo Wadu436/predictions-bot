@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,6 +72,7 @@ class Site:
         group_by: str = None,
         having: str = None,
         order_by: str = None,
+        max_attempts: int = 3,
     ):
         # Filter arguments
         kwargs_unfiltered = {
@@ -90,22 +92,37 @@ class Site:
         results = []
 
         while len(results) % self.limit == 0:
-            kwargs["offset"] = len(results)
-            query_url = _construct_url(self.api_url, **kwargs)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(query_url) as response:
-                    if response.status != 200:
-                        raise ServerException(
-                            f"HTTP Error. Status code: {response.status}.",
-                        )
-                    if response.content_type != "application/json":
-                        raise ServerException(
-                            "Response error. Website did not return json format.",
-                        )
-                    response_json = await response.text()
+            attempts = 0
+            while attempts < max_attempts:
+                kwargs["offset"] = len(results)
+                query_url = _construct_url(self.api_url, **kwargs)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(query_url) as response:
+                        if response.status != 200:
+                            raise ServerException(
+                                f"HTTP Error. Status code: {response.status}.",
+                            )
+                        if response.content_type != "application/json":
+                            raise ServerException(
+                                "Response error. Website did not return json format.",
+                            )
+                        response_json = await response.text()
 
-            response_dict = json.loads(response_json)
+                response_dict = json.loads(response_json)
+                if "error" in response_dict:
+                    logging.error(
+                        f"APIException from following query: {query_url}, retrying..."
+                    )
+                    attempts += 1
+                    continue
+
+                break
+
             if "error" in response_dict:
+                # Tried max amount of times but still error
+                logging.error(
+                    f"APIException from following query: {query_url}, done retrying."
+                )
                 raise APIException(
                     response_dict["error"]["code"],
                     response_dict["error"]["info"],
@@ -127,6 +144,7 @@ class Site:
         title: str = None,
         text: str = None,
         prop: str,
+        max_attempts: int = 3,
         **kwargs,
     ):
         if page:
@@ -149,20 +167,34 @@ class Site:
                 kwargs=kwargs,
             )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(query_url) as response:
-                if response.status != 200:
-                    raise ServerException(
-                        f"HTTP Error. Status code: {response.status}.",
-                    )
-                if response.content_type != "application/json":
-                    raise ServerException(
-                        "Response error. Website did not return json format.",
-                    )
-                response_json = await response.text()
+        attempts = 0
+        while attempts < max_attempts:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(query_url) as response:
+                    if response.status != 200:
+                        raise ServerException(
+                            f"HTTP Error. Status code: {response.status}.",
+                        )
+                    if response.content_type != "application/json":
+                        raise ServerException(
+                            "Response error. Website did not return json format.",
+                        )
+                    response_json = await response.text()
 
-        response_dict = json.loads(response_json)
+            response_dict = json.loads(response_json)
+            if "error" in response_dict:
+                logging.error(
+                    f"APIException from following query: {query_url}, retrying..."
+                )
+                attempts += 1
+                continue
+
+            break
+
         if "error" in response_dict:
+            logging.error(
+                f"APIException from following query: {query_url}, done retrying."
+            )
             raise APIException(
                 response_dict["error"]["code"],
                 response_dict["error"]["info"],
@@ -252,14 +284,17 @@ class Leaguepedia(Site):
         overviewpage: str,
         tabs: list[str],
     ) -> list[MatchScheduleRow]:
-        tab_comp = [f"Tab='{t}'" for t in tabs]
-        result = await self.cargo_query(
-            tables=MatchScheduleRow.table,
-            fields=_fields_to_query(MatchScheduleRow.fields),
-            where=f"OverviewPage='{overviewpage}' AND ({' OR '.join(tab_comp)})",
-            order_by="DateTime_UTC",
-        )
-        return [MatchScheduleRow.from_row(row) for row in result]
+        if len(tabs) > 0:
+            tab_comp = [f"Tab='{t}'" for t in tabs]
+            result = await self.cargo_query(
+                tables=MatchScheduleRow.table,
+                fields=_fields_to_query(MatchScheduleRow.fields),
+                where=f"OverviewPage='{overviewpage}' AND ({' OR '.join(tab_comp)})",
+                order_by="DateTime_UTC",
+            )
+            return [MatchScheduleRow.from_row(row) for row in result]
+        else:
+            return []
 
     async def get_tabs_before(
         self,

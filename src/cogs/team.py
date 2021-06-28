@@ -1,22 +1,19 @@
-from typing import Optional
-
 import discord
+import tortoise.exceptions
 from discord.ext import commands
+from tortoise.query_utils import Q
 
+from src import models
 from src.cogs.tournament import TournamentCog
 from src.utils import decorators
-from src.utils.converters import CodeConverter  # ,  EmojiConverter
-from src.utils.database import Database, Match, Team
 
 
-class EditException(Exception):
-    team: Team
+class TeamException(Exception):
     reason: str
 
-    def __init__(self, team: Team, reason: str):
-        self.team = team
+    def __init__(self, reason: str):
         self.reason = reason
-        super().__init__(team, reason)
+        super().__init__(reason)
 
 
 class TeamsCog(commands.Cog, name="Teams"):
@@ -58,30 +55,27 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_name(
         self,
         ctx: commands.Context,
-        code: CodeConverter(True),
+        code: str,
         *,
         name: str,
     ):
-        tr_cog: TournamentCog = self.bot.get_cog("Tournament")
-
-        team: Team = await Database.get_team(code, ctx.guild.id)
-
-        if name == team.name:
-            raise EditException(
-                team,
-                "New name is the same as the current name.",
-            )
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}")
 
         original_name = team.name
-        team.name = name
 
-        await Database.update_team(code, team)
+        if name != team.name:
+            team.name = name
+            await team.save()
 
+        tr_cog: TournamentCog = self.bot.get_cog("Tournament")
         if tr_cog is not None:
             # Update matches
-            to_update: list[Match] = await Database.get_matches_by_team(team)
+            to_update = await models.Match.filter(Q(team1=team) | Q(team2=team))
             for match in to_update:
-                await tr_cog.update_match_message(match)
+                await tr_cog.tournament_manager.update_match_message(match)
 
         await ctx.send(f'Changed name:\n "{original_name}" => "{name}"')
 
@@ -97,22 +91,24 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_code(
         self,
         ctx: commands.Context,
-        old_code: CodeConverter(True),
-        new_code: CodeConverter(False),
+        old_code: str,
+        new_code: str,
     ):
-        team: Team = await Database.get_team(old_code, ctx.guild.id)
+        try:
+            team = await models.Team.get(code=old_code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {old_code}.")
 
-        if new_code == old_code:
-            raise EditException(
-                team,
-                "New code is the same as the current code.",
+        try:
+            if new_code != team.code:
+                team.code = new_code
+                await team.save()
+        except tortoise.exceptions.IntegrityError:
+            raise TeamException(
+                f"Could not update team {old_code}. (Maybe the code {new_code} is already in use?)",
             )
 
-        team.code = new_code
-
-        await Database.update_team(old_code, team)
-
-        await ctx.send(f'Changed code:\n "{old_code}" => "{new_code}"')
+        await ctx.send(f"Changed code:\n '{old_code}' => '{new_code}'.")
 
     @edit_group.group(
         name="emoji",
@@ -126,28 +122,43 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_emoji(
         self,
         ctx: commands.Context,
-        code: CodeConverter(True),
+        code: str,
         emoji: commands.converter.EmojiConverter,
     ):
-        team: Team = await Database.get_team(code, ctx.guild.id)
-        matches: list[Match] = await Database.get_matches_by_team(team)
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
+        running_matches = await models.Match.filter(
+            Q(team1=team) | Q(team2=team),
+            running=models.MatchRunningEnum.RUNNING,
+        )
 
-        if len(matches) > 0:
-            raise EditException(
-                team,
-                "Cannot edit emoji for a team that is already in matches.",
+        if len(running_matches) > 0:
+            raise TeamException(
+                f"Could not edit team {team.code} (Cannot edit emoji for a team that is part of a running match).",
             )
 
-        if emoji.id == team.emoji:
-            raise EditException(
-                team,
-                "New emoji is the same as the current emoji.",
+        tr_cog: TournamentCog = self.bot.get_cog("Tournament")
+        dialogs_opened = False
+        if tr_cog is not None:
+            closed_matches = await models.Match.filter(
+                Q(team1=team) | Q(team2=team),
+                running=models.MatchRunningEnum.CLOSED,
+            )
+            dialogs_opened = any(m in tr_cog.dialogs.values() for m in closed_matches)
+
+        if dialogs_opened:
+            raise TeamException(
+                f"Could not edit team {team.code} (Cannot edit emoji for a team that has an open dialog for ending a match).",
             )
 
         old_emoji = self.bot.get_emoji(team.emoji)
-        team.emoji = emoji.id
 
-        await Database.update_team(code, team)
+        if emoji.id != team.emoji:
+            team.emoji = emoji.id
+            await team.save()
+
         await ctx.send(f"Changed emoji:\n {old_emoji} => {emoji}")
 
     @team_group.command(
@@ -164,10 +175,20 @@ class TeamsCog(commands.Cog, name="Teams"):
         self,
         ctx,
         name: str,
-        code: CodeConverter(False),
+        code: str,
         emoji: commands.converter.EmojiConverter,
     ):
-        await Database.insert_team(Team(name.strip(), code, emoji.id, ctx.guild.id))
+        try:
+            await models.Team.create(
+                name=name.strip(),
+                code=code,
+                emoji=emoji.id,
+                guild=ctx.guild.id,
+            )
+        except tortoise.exceptions.IntegrityError:
+            raise TeamException(
+                f"Could not create new team. (Maybe the code {code} is already in use?)",
+            )
         await ctx.send(f"Added team `{code}`")
 
     @team_group.command(
@@ -179,11 +200,12 @@ class TeamsCog(commands.Cog, name="Teams"):
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def team_remove(self, ctx, code: CodeConverter(True)):
-        team: Optional[Team] = await Database.get_team(code, ctx.guild.id)
-        if team is not None:
-            await Database.delete_team(team)
-
+    async def team_remove(self, ctx, code: str):
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
+        await team.delete()
         await ctx.send(f"Deleted team {team.name}.")
 
     @team_group.command(
@@ -195,35 +217,34 @@ class TeamsCog(commands.Cog, name="Teams"):
     )
     @commands.guild_only()
     async def team_list(self, ctx):
-        teams = await Database.get_teams_by_guild(ctx.guild.id)
+        teams = await models.Team.filter(guild=ctx.guild.id)
 
         if not (len(teams) > 0):
             await ctx.send("`No teams found.`")
             return
 
-        embed = discord.Embed(title="Teams")
+        team_chunks = [teams[i : i + 25] for i in range(0, len(teams), 25)]
 
-        for team in teams:
-            emoji = self.bot.get_emoji(team.emoji)
-            embed.add_field(
-                name=f"{emoji} {team.name}",
-                value=f"Code: `{team.code}`",
-            )
-        await ctx.send(embed=embed)
+        for team_chunk in team_chunks:
+            embed = discord.Embed(title="Teams")
+            for team in team_chunk:
+                emoji = self.bot.get_emoji(team.emoji)
+                embed.add_field(
+                    name=f"{emoji} {team.name}",
+                    value=f"Code: `{team.code}`",
+                )
+            await ctx.send(embed=embed)
 
     async def cog_command_error(self, ctx, error):
         message = ""
 
         if isinstance(error, commands.CommandInvokeError):
-            if isinstance(error.original, EditException):
-                message = f"Could not edit team {error.original.team.code}"
-                if error.original.reason is not None:
-                    message += f" ({error.original.reason})"
+            if isinstance(error.original, TeamException):
+                message = error.original.reason
 
         if len(message) > 0:
             await ctx.send(f"`{message}`")
             ctx.handled = True
-            return
 
 
 def setup(bot):

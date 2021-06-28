@@ -1,17 +1,13 @@
+import asyncio
 import logging
-import sqlite3
 import traceback
 
 import discord
 from discord.ext import commands
+from tortoise import Tortoise
 
 import config
-from src.utils.converters import (
-    EmojiNotFound,
-    EmojiNotInGuild,
-    TeamDoesntExist,
-    TeamExist,
-)
+import settings
 
 PREFIX = "+"
 
@@ -204,29 +200,6 @@ async def on_command_error(ctx, error):
     if getattr(ctx, "handled", False):
         return
 
-    # Handle converter errors
-    message = ""
-    if isinstance(error, EmojiNotInGuild):
-        message = "You can only use unicode/global emoji or emoji from this server."
-    if isinstance(error, EmojiNotFound):
-        message = "That is not an emoji."
-
-    if isinstance(error, TeamExist):
-        if len(error.args) > 0:
-            message = f"Team with code {error.args[0]} already exists."
-        else:
-            message = "Team already exists."
-
-    if isinstance(error, TeamDoesntExist):
-        if len(error.args) > 0:
-            message = f"Team with code {error.args[0]} doesn't exist."
-        else:
-            message = "Team doesn't exist."
-
-    if len(message) > 0:
-        await ctx.send(f"`{message}`")
-        return
-
     # Handle discord py errors
     if isinstance(error, commands.UserInputError):
         await ctx.send_help(ctx.command)
@@ -235,15 +208,6 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
 
-    if isinstance(error, commands.CommandInvokeError):
-        error = error.original
-        if isinstance(error, sqlite3.OperationalError):
-            await ctx.send("`Database error.`")
-            logging.error("Database error.")
-
-        if isinstance(error, sqlite3.IntegrityError):
-            await ctx.send("`Database integrity error.`")
-            logging.error("Database integrity error.")
     else:
         await ctx.send("`An error occured while processing the command.`")
 
@@ -253,11 +217,25 @@ async def on_command_error(ctx, error):
 
 
 def launch():
-    # Start bot
-    logging.debug("Starting bot")
-    for cog in initial_extensions:
-        logging.debug(f"Loading extension {cog}")
-        load_extension_wrapper(cog)
+    # Initialize Database
+    async def async_main():
+        logging.info("Initializing Database connection")
+        await Tortoise.init(config=settings.TORTOISE_ORM)
 
-    bot.run(config.token, bot=True, reconnect=True)
-    logging.debug("Shutting down")
+        # Start bot
+        logging.info("Starting bot")
+
+        for cog in initial_extensions:
+            logging.info(f"Loading extension {cog}")
+            load_extension_wrapper(cog)
+
+        await bot.start(config.token, bot=True, reconnect=True)
+
+    loop = asyncio.get_event_loop()
+
+    try:
+        loop.run_until_complete(async_main())
+    except KeyboardInterrupt:
+        loop.run_until_complete(bot.close())
+    finally:
+        loop.close()

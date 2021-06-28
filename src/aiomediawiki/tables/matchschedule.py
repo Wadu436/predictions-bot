@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -36,6 +36,8 @@ class MatchScheduleRow:
 
     @classmethod
     def from_row(cls, row):
+        start = datetime.strptime(row["DateTime UTC"], "%Y-%m-%d %H:%M:%S")
+        start = start.replace(tzinfo=timezone.utc)
         return MatchScheduleRow(
             team1=row["Team1"],
             team2=row["Team2"],
@@ -43,7 +45,7 @@ class MatchScheduleRow:
             team1_score=None if row["Team1Score"] == "" else int(row["Team1Score"]),
             team2_score=None if row["Team2Score"] == "" else int(row["Team2Score"]),
             best_of=int(row["BestOf"]),
-            start=datetime.strptime(row["DateTime UTC"], "%Y-%m-%d %H:%M:%S"),
+            start=start,
             match_id=row["MatchId"],
             tab=row["Tab"],
             n_matchintab=int(row["N MatchInTab"]),
