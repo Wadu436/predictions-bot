@@ -3,3 +3,4 @@ discord-py~=1.7.3
 emojis~=0.6.0
 colorthief~=0.2.1
 tortoise-orm[asyncpg]~=0.17.4
+aerich~=0.5.3

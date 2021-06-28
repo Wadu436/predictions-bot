@@ -25,4 +25,4 @@ COPY ./db_init.py ./db_init.py
 COPY ./config.py ./config.py
 
 # Run application
-CMD ["python3", "main.py"]
+CMD ["/bin/bash", "-c", "aerich upgrade && python3 main.py"]
