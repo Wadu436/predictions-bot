@@ -238,4 +238,5 @@ def launch():
     except KeyboardInterrupt:
         loop.run_until_complete(bot.close())
     finally:
+        loop.run_until_complete(Tortoise.close_connections())
         loop.close()
