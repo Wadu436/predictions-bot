@@ -162,7 +162,7 @@ class TournamentManager:
         if len(team_correct) > 0:
             current_embed.add_field(
                 name="**The following player(s) predicted the correct winning team:**",
-                value="\u2800",
+                value=f"{team_winners.name}",
                 inline=False,
             )
 
@@ -180,7 +180,7 @@ class TournamentManager:
         else:
             current_embed.add_field(
                 name="**Noone predicted the correct team**",
-                value="\u2800",
+                value=f"{team_winners.name}",
                 inline=False,
             )
 
@@ -192,7 +192,7 @@ class TournamentManager:
             if len(game_correct) > 0:
                 current_embed.add_field(
                     name="**The following player(s) predicted the correct amount of games:**",
-                    value="\u2800",
+                    value=f"{match.games} games",
                     inline=False,
                 )
 
@@ -210,7 +210,7 @@ class TournamentManager:
             else:
                 current_embed.add_field(
                     name="**Noone predicted the correct amount of games**",
-                    value="\u2800",
+                    value=f"{match.games} games",
                     inline=False,
                 )
 
