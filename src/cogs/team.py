@@ -1,11 +1,11 @@
 import discord
+import tortoise.exceptions
 from discord.ext import commands
 from tortoise.query_utils import Q
 
 from src import models
 from src.cogs.tournament import TournamentCog
 from src.utils import decorators
-from src.utils.converters import CodeConverter  # ,  EmojiConverter
 
 
 class TeamException(Exception):
@@ -55,11 +55,14 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_name(
         self,
         ctx: commands.Context,
-        code: CodeConverter(True),
+        code: str,
         *,
         name: str,
     ):
-        team = await models.Team.get(code=code, guild=ctx.guild.id)
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}")
 
         original_name = team.name
 
@@ -88,16 +91,24 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_code(
         self,
         ctx: commands.Context,
-        old_code: CodeConverter(True),
-        new_code: CodeConverter(False),
+        old_code: str,
+        new_code: str,
     ):
-        team = await models.Team.get(code=old_code, guild=ctx.guild.id)
+        try:
+            team = await models.Team.get(code=old_code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {old_code}.")
 
-        if new_code != team.code:
-            team.code = new_code
-            await team.save()
+        try:
+            if new_code != team.code:
+                team.code = new_code
+                await team.save()
+        except tortoise.exceptions.IntegrityError:
+            raise TeamException(
+                f"Could not update team {old_code}. (Maybe the code {new_code} is already in use?)",
+            )
 
-        await ctx.send(f'Changed code:\n "{old_code}" => "{new_code}"')
+        await ctx.send(f"Changed code:\n '{old_code}' => '{new_code}'.")
 
     @edit_group.group(
         name="emoji",
@@ -111,10 +122,13 @@ class TeamsCog(commands.Cog, name="Teams"):
     async def edit_emoji(
         self,
         ctx: commands.Context,
-        code: CodeConverter(True),
+        code: str,
         emoji: commands.converter.EmojiConverter,
     ):
-        team = await models.Team.get(code=code, guild=ctx.guild.id)
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
         matches = await models.Match.filter(Q(team1=team) | Q(team2=team))
 
         if len(matches) > 0:
@@ -144,15 +158,20 @@ class TeamsCog(commands.Cog, name="Teams"):
         self,
         ctx,
         name: str,
-        code: CodeConverter(False),
+        code: str,
         emoji: commands.converter.EmojiConverter,
     ):
-        await models.Team.create(
-            name=name.strip(),
-            code=code,
-            emoji=emoji.id,
-            guild=ctx.guild.id,
-        )
+        try:
+            await models.Team.create(
+                name=name.strip(),
+                code=code,
+                emoji=emoji.id,
+                guild=ctx.guild.id,
+            )
+        except tortoise.exceptions.IntegrityError:
+            raise TeamException(
+                f"Could not create new team. (Maybe the code {code} is already in use?)",
+            )
         await ctx.send(f"Added team `{code}`")
 
     @team_group.command(
@@ -164,8 +183,11 @@ class TeamsCog(commands.Cog, name="Teams"):
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
-    async def team_remove(self, ctx, code: CodeConverter(True)):
-        team = await models.Team.get(code=code, guild=ctx.guild.id)
+    async def team_remove(self, ctx, code: str):
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
         await team.delete()
         await ctx.send(f"Deleted team {team.name}.")
 

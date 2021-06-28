@@ -7,12 +7,6 @@ from discord.ext import commands
 from tortoise import Tortoise
 
 import config
-from src.utils.converters import (
-    EmojiNotFound,
-    EmojiNotInGuild,
-    TeamDoesntExist,
-    TeamExist,
-)
 
 PREFIX = "+"
 
@@ -203,29 +197,6 @@ async def show_loaded(ctx, *extensions):
 async def on_command_error(ctx, error):
     # Prevents already handled commands from being handled here
     if getattr(ctx, "handled", False):
-        return
-
-    # Handle converter errors
-    message = ""
-    if isinstance(error, EmojiNotInGuild):
-        message = "You can only use unicode/global emoji or emoji from this server."
-    if isinstance(error, EmojiNotFound):
-        message = "That is not an emoji."
-
-    if isinstance(error, TeamExist):
-        if len(error.args) > 0:
-            message = f"Team with code {error.args[0]} already exists."
-        else:
-            message = "Team already exists."
-
-    if isinstance(error, TeamDoesntExist):
-        if len(error.args) > 0:
-            message = f"Team with code {error.args[0]} doesn't exist."
-        else:
-            message = "Team doesn't exist."
-
-    if len(message) > 0:
-        await ctx.send(f"`{message}`")
         return
 
     # Handle discord py errors

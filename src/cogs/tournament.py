@@ -7,6 +7,8 @@ from traceback import print_exc
 from typing import Optional
 
 import discord
+import tortoise
+import tortoise.exceptions
 from discord.ext import commands, tasks
 
 from src import models
@@ -14,7 +16,6 @@ from src.aiomediawiki.aiomediawiki import APIException, ServerException, leaguep
 from src.aiomediawiki.tables.teams import TeamsRow
 from src.managers.tournamentmanager import TournamentManager
 from src.utils import decorators
-from src.utils.converters import BestOfXConverter, CodeConverter
 
 
 # Exceptions
@@ -190,6 +191,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 emoji=emoji.id,
                 guild=guild_id,
                 fandom_overview_page=team.overviewPage,
+                bot_created=True,
             )
 
             return False
@@ -444,9 +446,9 @@ class TournamentCog(commands.Cog, name="Tournament"):
     @match_group.command(
         name="start",
         brief="Starts a match.",
-        description="Creates a new match between two teams.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-X must be 1, 3 or 5.",
+        description="Creates a new match between two teams.\n\nArguments:\n-Match name can contain spaces.\n-Short codes must be for teams that exist in this server.\n-X must be 1, 3 or 5.\n\nExample: match start Week 3 Match 2 g2 fnc 3",
         aliases=["s"],
-        usage="<match name> <short code team 1> <short code team 2> bo<X>",
+        usage="<match name> <short code team 1> <short code team 2> <best of>",
     )
     @commands.guild_only()
     @commands.has_permissions(manage_messages=True)
@@ -455,9 +457,9 @@ class TournamentCog(commands.Cog, name="Tournament"):
         self,
         ctx,
         name: str,
-        team1_code: CodeConverter(True),
-        team2_code: CodeConverter(True),
-        bestof: BestOfXConverter,
+        team1_code: str,
+        team2_code: str,
+        bestof: int,
     ):
         # Check if tournament running
         tournament = await models.Tournament.get_or_none(
@@ -465,12 +467,22 @@ class TournamentCog(commands.Cog, name="Tournament"):
             running=models.MatchRunningEnum.RUNNING,
         )
         if tournament is None:
+            raise TournamentException("There is no running tournament in this channel.")
+
+        if bestof not in [1, 3, 5]:
             raise TournamentException(
-                "There is no  running tournament in this channel."
+                f"{bestof} is not a valid value for the 'best of' field."
             )
 
-        team1 = await models.Team.get(code=team1_code, guild=ctx.guild.id)
-        team2 = await models.Team.get(code=team2_code, guild=ctx.guild.id)
+        try:
+            team1 = await models.Team.get(code=team1_code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TournamentException(f"There is no team with code {team1_code}")
+
+        try:
+            team2 = await models.Team.get(code=team2_code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TournamentException(f"There is no team with code {team2_code}")
 
         await self.tournament_manager.start_match(
             tournament,
