@@ -129,11 +129,28 @@ class TeamsCog(commands.Cog, name="Teams"):
             team = await models.Team.get(code=code, guild=ctx.guild.id)
         except tortoise.exceptions.DoesNotExist:
             raise TeamException(f"There is no team with code {code}.")
-        matches = await models.Match.filter(Q(team1=team) | Q(team2=team))
+        running_matches = await models.Match.filter(
+            Q(team1=team) | Q(team2=team),
+            running=models.MatchRunningEnum.RUNNING,
+        )
 
-        if len(matches) > 0:
+        if len(running_matches) > 0:
             raise TeamException(
-                f"Could not edit team {team.code} (Cannot edit emoji for a team that is already in matches).",
+                f"Could not edit team {team.code} (Cannot edit emoji for a team that is part of a running match).",
+            )
+
+        tr_cog: TournamentCog = self.bot.get_cog("Tournament")
+        dialogs_opened = False
+        if tr_cog is not None:
+            closed_matches = await models.Match.filter(
+                Q(team1=team) | Q(team2=team),
+                running=models.MatchRunningEnum.CLOSED,
+            )
+            dialogs_opened = any(m in tr_cog.dialogs.values() for m in closed_matches)
+
+        if dialogs_opened:
+            raise TeamException(
+                f"Could not edit team {team.code} (Cannot edit emoji for a team that has an open dialog for ending a match).",
             )
 
         old_emoji = self.bot.get_emoji(team.emoji)
@@ -206,15 +223,17 @@ class TeamsCog(commands.Cog, name="Teams"):
             await ctx.send("`No teams found.`")
             return
 
-        embed = discord.Embed(title="Teams")
+        team_chunks = [teams[i : i + 25] for i in range(0, len(teams), 25)]
 
-        for team in teams:
-            emoji = self.bot.get_emoji(team.emoji)
-            embed.add_field(
-                name=f"{emoji} {team.name}",
-                value=f"Code: `{team.code}`",
-            )
-        await ctx.send(embed=embed)
+        for team_chunk in team_chunks:
+            embed = discord.Embed(title="Teams")
+            for team in team_chunk:
+                emoji = self.bot.get_emoji(team.emoji)
+                embed.add_field(
+                    name=f"{emoji} {team.name}",
+                    value=f"Code: `{team.code}`",
+                )
+            await ctx.send(embed=embed)
 
     async def cog_command_error(self, ctx, error):
         message = ""
