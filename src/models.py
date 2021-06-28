@@ -47,10 +47,10 @@ class Team(UUIDPrimaryKeyModel):
 
     fandom_overview_page = fields.TextField(null=True)
 
+    bot_created = fields.BooleanField(default=False)
+
     matches_team1: fields.ReverseRelation["Match"]
     matches_team2: fields.ReverseRelation["Match"]
-
-    # bot_created: fields.BooleanField(default=False)
 
     @property
     def is_fandom(self) -> bool:
