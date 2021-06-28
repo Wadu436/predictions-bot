@@ -19,7 +19,7 @@ Install the requirements: `pip install -r requirements.txt` \
 Initialize the database tables by running `aerich upgrade` \
 Run `python main.py`
 
-Alternatively, if you want to run it with Docker you can simply run `docker-compose up -d` to start the bot. The same command can be used to upgrade it. This should be done after creating `config.py`. The Docker image automatically initializes the database. It also performs any possible migrations.
+Alternatively, if you want to run it with Docker you can simply run `docker-compose up --build -d` to start the bot. The same command can be used to upgrade it. This should be done after creating `config.py`. The Docker image automatically initializes the database. It also performs any possible migrations.
 ## Different database
 The above procedure will automatically install interfaces for Sqlite and PostgreSQL databases. If you want to use a MySQL database instead, you will have to install either [aiomysql](https://pypi.org/project/aiomysql/0.0.21/) or [asyncmy](https://pypi.org/project/asyncmy/)
 ## Migrations
