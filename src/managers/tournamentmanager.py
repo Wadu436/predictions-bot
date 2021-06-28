@@ -179,7 +179,7 @@ class TournamentManager:
                 current_embed.add_field(name=name, value=f"{score} points")
         else:
             current_embed.add_field(
-                name="**Noone predicted the correct team**",
+                name="**No one predicted the correct team**",
                 value="\u2800",
                 inline=False,
             )
@@ -209,7 +209,7 @@ class TournamentManager:
                     current_embed.add_field(name=name, value=f"{score} points")
             else:
                 current_embed.add_field(
-                    name="**Noone predicted the correct amount of games**",
+                    name="**No one predicted the correct amount of games**",
                     value="\u2800",
                     inline=False,
                 )
