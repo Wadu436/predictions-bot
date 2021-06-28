@@ -7,6 +7,7 @@ from discord.ext import commands
 from tortoise import Tortoise
 
 import config
+import settings
 
 PREFIX = "+"
 
@@ -219,7 +220,7 @@ def launch():
     # Initialize Database
     async def async_main():
         logging.info("Initializing Database connection")
-        await Tortoise.init(config=config.TORTOISE_ORM)
+        await Tortoise.init(config=settings.TORTOISE_ORM)
 
         # Start bot
         logging.info("Starting bot")
