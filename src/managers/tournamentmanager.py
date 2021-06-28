@@ -40,7 +40,7 @@ class TournamentManager:
         str_list.append(f"Correct number of games - BO3: {tournament.score_bo3_games}")
         str_list.append(f"\nCorrect team - BO5: {tournament.score_bo5_team}\t")
         str_list.append(f"Correct number of games - BO5: {tournament.score_bo5_games}")
-        str_list.append("```")
+        str_list.append("```\n")
         content_scoring_table = "".join(str_list)
 
         leaderboard = await tournament.calculate_leaderboard()
