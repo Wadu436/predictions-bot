@@ -20,9 +20,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application
 COPY ./src ./src
-COPY ./main.py ./main.py
-COPY ./db_init.py ./db_init.py
+COPY ./aerich.ini ./aerich.ini
 COPY ./config.py ./config.py
+COPY ./main.py ./main.py
+COPY ./settings.py ./settings.py
 
 # Run application
 CMD ["/bin/bash", "-c", "aerich upgrade && python3 main.py"]
