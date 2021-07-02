@@ -564,11 +564,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
                     stop = int(s[1]) + 1
                     ids.extend(list(range(start, stop)))
 
-        matches = await models.Match.filter(
-            tournament=tournament,
-            id_in_tournament__in=ids,
-            running__not=models.MatchRunningEnum.ENDED,
-        ).select_related("team1", "team2")
+        # Also open the dialog for already ended matches in case the bot made a mistake
+        matches = (
+            await models.Match.filter(
+                tournament=tournament,
+                id_in_tournament__in=ids,
+            )
+            .order_by("id_in_tournament")
+            .select_related("team1", "team2")
+        )
 
         for match in matches:
             if match.running == models.MatchRunningEnum.RUNNING:

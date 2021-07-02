@@ -398,10 +398,6 @@ class TournamentManager:
     async def end_match(
         self, match: models.Match, team: int, games: int, update_tournament_message=True
     ):
-        # Safeguard
-        if match.running == models.MatchRunningEnum.ENDED:
-            return
-
         if match.running == models.MatchRunningEnum.RUNNING:
             await self.close_match(match, update_message=False)
 
