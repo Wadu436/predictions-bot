@@ -276,7 +276,6 @@ class TournamentManager:
         bestof,
         team1: models.Team,
         team2: models.Team,
-        fandom_match_id: Optional[str] = None,
         fandom_tab: Optional[str] = None,
         fandom_initialn_matchintab: Optional[int] = None,
     ) -> models.Match:
@@ -291,7 +290,6 @@ class TournamentManager:
             name=name,
             message=0,
             running=models.MatchRunningEnum.RUNNING,
-            fandom_match_id=fandom_match_id,
             fandom_tab=fandom_tab,
             fandom_initialn_matchintab=fandom_initialn_matchintab,
             team1=team1,

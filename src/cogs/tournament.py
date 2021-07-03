@@ -117,7 +117,6 @@ class TournamentCog(commands.Cog, name="Tournament"):
                             team1=team1,
                             team2=team2,
                             bestof=fandommatch.best_of,
-                            fandom_match_id=fandommatch.match_id,
                             fandom_tab=fandommatch.tab,
                             fandom_initialn_matchintab=fandommatch.initialn_matchintab,
                         )
