@@ -10,6 +10,8 @@ import discord
 import tortoise
 import tortoise.exceptions
 from discord.ext import commands, tasks
+from tortoise.expressions import F
+from tortoise.query_utils import Q
 
 from src import models
 from src.aiomediawiki.aiomediawiki import APIException, ServerException, leaguepedia
@@ -69,17 +71,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
         logging.debug("Fandom task done.")
 
     async def update_fandom_matches(self, tournament: models.Tournament):
-        tabs = await leaguepedia.get_tabs_before(
+        fandom_tabs = await leaguepedia.get_tabs_before(
             tournament.fandom_overview_page,
             datetime.now(tz=timezone.utc) + timedelta(days=4),
         )
 
         fandommatches = await leaguepedia.get_matches_in_tabs(
             tournament.fandom_overview_page,
-            tabs,
+            fandom_tabs,
         )
-        fandom_match_ids = {m.match_id for m in fandommatches}
-
         any_ended: bool = False
         matchdays_to_close: set[str, int] = {
             (fandommatch.tab, fandommatch.matchday)
@@ -94,23 +94,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
         teams = {t.fandom_overview_page: t for t in teams}
 
         db_matches = await models.Match.filter(
-            fandom_match_id__in=fandom_match_ids,
-            tournament=tournament,
+            tournament=tournament, fandom_tab__in=fandom_tabs
         )
-        db_matches = {m.fandom_match_id: m for m in db_matches}
+        db_matches = {
+            (m.fandom_tab, m.fandom_initialn_matchintab): m for m in db_matches
+        }
         for fandommatch in fandommatches:
             # Check if match already exists
-            if fandommatch.match_id not in db_matches:
+            if (
+                fandommatch.tab,
+                fandommatch.initialn_matchintab,
+            ) not in db_matches:
                 if fandommatch.winner is None:
                     # Match does not exist yet
-                    # team1 = await models.Team.get(
-                    #     fandom_overview_page=fandommatch.team1,
-                    #     guild=tournament.guild,
-                    # )
-                    # team2 = await models.Team.get(
-                    #     fandom_overview_page=fandommatch.team2,
-                    #     guild=tournament.guild,
-                    # )
                     team1 = teams[fandommatch.team1]
                     team2 = teams[fandommatch.team2]
 
@@ -122,12 +118,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
                             team2=team2,
                             bestof=fandommatch.best_of,
                             fandom_match_id=fandommatch.match_id,
+                            fandom_tab=fandommatch.tab,
+                            fandom_initialn_matchintab=fandommatch.initialn_matchintab,
                         )
                     except Exception as e:
                         print_exc()
                         pass
             else:
-                match = db_matches[fandommatch.match_id]
+                match = db_matches[(fandommatch.tab, fandommatch.initialn_matchintab)]
                 if match.running != models.MatchRunningEnum.ENDED:
                     if (
                         match.running == models.MatchRunningEnum.RUNNING

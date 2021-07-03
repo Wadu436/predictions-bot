@@ -16,6 +16,7 @@ class MatchScheduleRow:
         "MatchDay",
         "Tab",
         "N_MatchInTab",
+        "InitialN_MatchInTab",
     }
     table = "MatchSchedule"
 
@@ -32,6 +33,7 @@ class MatchScheduleRow:
     match_id: str
     tab: str
     n_matchintab: int
+    initialn_matchintab: int
     matchday: int
 
     @classmethod
@@ -49,5 +51,6 @@ class MatchScheduleRow:
             match_id=row["MatchId"],
             tab=row["Tab"],
             n_matchintab=int(row["N MatchInTab"]),
+            initialn_matchintab=int(row["InitialN MatchInTab"]),
             matchday=int(row["MatchDay"]),
         )

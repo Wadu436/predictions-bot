@@ -77,11 +77,11 @@ class Tournament(UUIDPrimaryKeyModel):
 
     updates_channel = fields.BigIntField(null=True)
 
-    score_bo1_team = fields.IntField(default=1)
-    score_bo3_team = fields.IntField(default=2)
-    score_bo5_team = fields.IntField(default=3)
-    score_bo3_games = fields.IntField(default=1)
-    score_bo5_games = fields.IntField(default=1)
+    score_bo1_team = fields.SmallIntField(default=1)
+    score_bo3_team = fields.SmallIntField(default=2)
+    score_bo5_team = fields.SmallIntField(default=3)
+    score_bo3_games = fields.SmallIntField(default=1)
+    score_bo5_games = fields.SmallIntField(default=1)
 
     @property
     def is_fandom(self) -> bool:
@@ -137,8 +137,8 @@ class Prediction(UUIDPrimaryKeyModel):
     user = fields.ForeignKeyField("models.User", related_name="predictions")
     match = fields.ForeignKeyField("models.Match", related_name="predictions")
 
-    team = fields.IntField()
-    games = fields.IntField()
+    team = fields.SmallIntField()
+    games = fields.SmallIntField()
 
     class Meta:
         table = "prediction"
@@ -146,16 +146,18 @@ class Prediction(UUIDPrimaryKeyModel):
 
 
 class Match(UUIDPrimaryKeyModel):
-    id_in_tournament = fields.IntField()
+    id_in_tournament = fields.SmallIntField()
     name = fields.TextField()
     message = fields.BigIntField(unique=True)
     running = fields.IntEnumField(MatchRunningEnum)
 
-    result = fields.IntField(default=0)
-    games = fields.IntField(default=0)
-    bestof = fields.IntField(default=0)
+    result = fields.SmallIntField(default=0)
+    games = fields.SmallIntField(default=0)
+    bestof = fields.SmallIntField(default=0)
 
     fandom_match_id = fields.TextField(null=True)
+    fandom_tab = fields.TextField(null=True)
+    fandom_initialn_matchintab = fields.SmallIntField(null=True)
 
     users: fields.ManyToManyRelation["User"] = fields.ManyToManyField(
         "models.User",
@@ -170,7 +172,9 @@ class Match(UUIDPrimaryKeyModel):
 
     @property
     def is_fandom(self) -> bool:
-        return self.fandom_match_id is not None
+        return (
+            self.fandom_tab is not None and self.fandom_initialn_matchintab is not None
+        )
 
     @property
     def win_games(self) -> int:
@@ -185,6 +189,7 @@ class Match(UUIDPrimaryKeyModel):
         unique_together = (
             ("id_in_tournament", "tournament"),
             ("tournament", "fandom_match_id"),
+            ("tournament", "fandom_tab", "fandom_initialn_matchintab"),
         )
 
     def __str__(self):
