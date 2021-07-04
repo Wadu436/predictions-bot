@@ -5,13 +5,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from traceback import print_exc
 from typing import Optional
+from uuid import UUID
 
 import discord
 import tortoise
 import tortoise.exceptions
+from discord.channel import TextChannel
 from discord.ext import commands, tasks
-from tortoise.expressions import F
-from tortoise.query_utils import Q
 
 from src import models
 from src.aiomediawiki.aiomediawiki import APIException, ServerException, leaguepedia
@@ -39,6 +39,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         "bo5_games": 1,
     }
     dialogs: dict[int, int] = {}  # (dialog message, match message)
+    fandommatch_errors: set[UUID] = set()
+
     # http:// or https://
     link_validation_regex = re.compile(r"^(?:http)s?://", re.IGNORECASE)
     tournament_manager: TournamentManager
@@ -95,7 +97,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         db_matches = await models.Match.filter(
             tournament=tournament, fandom_tab__in=fandom_tabs
-        )
+        ).select_related("team1", "team2")
         db_matches = {
             (m.fandom_tab, m.fandom_initialn_matchintab): m for m in db_matches
         }
@@ -137,6 +139,30 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
                     if fandommatch.winner is not None:
                         # Match is over (there is a result)
+
+                        # Safety check on the teams
+                        if (
+                            fandommatch.team1 != match.team1.fandom_overview_page
+                            or fandommatch.team2 != match.team2.fandom_overview_page
+                        ):
+                            # Generate an error message
+                            if match.id not in self.fandommatch_errors:
+                                channel: TextChannel
+                                if tournament.updates_channel is not None:
+                                    channel_id = tournament.updates_channel
+                                    channel = self.bot.get_channel(channel_id)
+                                    message = f"There was a problem closing match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention})."
+                                else:
+                                    channel_id = tournament.channel
+                                    channel = self.bot.get_channel(channel_id)
+                                    message = f"There was a problem closing match {match.id_in_tournament}."
+
+                                if channel is not None:
+                                    channel.send(message)
+                                    self.fandommatch_errors.add(match.id)
+
+                            continue
+
                         any_ended = True
                         await self.tournament_manager.end_match(
                             match,
