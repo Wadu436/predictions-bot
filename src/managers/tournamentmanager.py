@@ -23,7 +23,7 @@ class TournamentManager:
         self, tournament: models.Tournament, tabs: Optional[list[str]] = None
     ):
         # Header
-        content_header = f"**{tournament.name} Leaderboard**"
+        content_header = f"**{tournament.name} Leaderboard{' - ' + ' '.join(tabs) if tabs is not None else ''}**"
 
         content_header += "\n\n"
 
@@ -59,7 +59,7 @@ class TournamentManager:
 
         leaderboard_str = "".join(str_list)
         if leaderboard_str:
-            content_leaderboard = f"***Leaderboard***\n```c\n{leaderboard_str}```\n"
+            content_leaderboard = f"```c\n{leaderboard_str}```\n"
         else:
             content_leaderboard = ""
 
