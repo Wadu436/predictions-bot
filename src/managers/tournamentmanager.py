@@ -19,6 +19,55 @@ class TournamentManager:
     def __init__(self, client: discord.Client):
         self.client = client
 
+    async def generate_leaderboard_text(
+        self, tournament: models.Tournament, tabs: Optional[list[str]] = None
+    ):
+        # Header
+        content_header = f"**{tournament.name} Leaderboard**"
+
+        content_header += "\n\n"
+
+        leaderboard = await tournament.calculate_leaderboard(tabs=tabs)
+
+        # Calculate formatting
+        rank_size = len(str(len(leaderboard)))
+        name_size = 0
+        score_size = 0
+        correct_size = 0
+        percent_size = 0  # 100.0%
+
+        for entry in leaderboard:
+            name_size = max(len(entry.user.name), name_size)
+            score_size = max(len(str(entry.score)), score_size)
+            correct_size = max(len(str(f"{entry.correct}/{entry.total}")), correct_size)
+            percent_size = max(len(f"{entry.percentage:.1f}%"), percent_size)
+
+        # Format the leaderboard
+        counter = itertools.count(1)
+        str_list = []
+        for entry in leaderboard:
+            entry_correct = f"{entry.correct}/{entry.total}"
+
+            str_list.append(f"{next(counter):>{rank_size}}")
+            str_list.append("  -  ")
+            str_list.append(f"{entry.user.name:<{name_size}}  ")
+            str_list.append(f"{entry.score:>{score_size}} points")
+            str_list.append("  -  ")
+            str_list.append(f"{entry_correct:>{correct_size}} correct ")
+            percentage_str = f"{entry.percentage:.1f}%"
+            str_list.append(f"({percentage_str:>{percent_size}})\n")
+
+        leaderboard_str = "".join(str_list)
+        if leaderboard_str:
+            content_leaderboard = f"***Leaderboard***\n```c\n{leaderboard_str}```\n"
+        else:
+            content_leaderboard = ""
+
+        # Combine
+        content = f"{content_header}{content_leaderboard}".strip()
+
+        return content
+
     async def generate_tournament_text(self, tournament: models.Tournament):
         # Header
         content_header = f"**{tournament.name}**"
@@ -226,7 +275,7 @@ class TournamentManager:
         fandom_overview_page: Optional[str] = None,
     ) -> models.Tournament:
         tournament = models.Tournament(
-            name=name,
+            name=name.replace(":", " "),
             channel=channel,
             guild=guild,
             message=0,

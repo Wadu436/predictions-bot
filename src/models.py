@@ -1,6 +1,8 @@
 import math
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Optional
+from uuid import UUID
 
 from tortoise import fields
 from tortoise.models import Model
@@ -87,12 +89,28 @@ class Tournament(UUIDPrimaryKeyModel):
     def is_fandom(self) -> bool:
         return self.fandom_overview_page is not None
 
-    async def calculate_leaderboard(self) -> list[ScoreboardEntry]:
+    async def calculate_leaderboard(
+        self,
+        tabs: Optional[list[str]] = None,
+    ) -> list[ScoreboardEntry]:
+        matches: list[UUID]
+
         scores: dict[str, ScoreboardEntry] = {}
 
-        predictions = Prediction.filter(
-            match__tournament=self,
-            match__running=MatchRunningEnum.ENDED,
+        if tabs is None:
+            matches = await Match.filter(
+                tournament=self,
+                running=MatchRunningEnum.ENDED,
+            ).values_list("id", flat=True)
+        else:
+            matches = await Match.filter(
+                tournament=self,
+                running=MatchRunningEnum.ENDED,
+                fandom_tab__in=tabs,
+            ).values_list("id", flat=True)
+
+        predictions = await Prediction.filter(
+            match_id__in=matches,
         ).select_related("match", "user")
 
         team_score_table = {
@@ -105,7 +123,7 @@ class Tournament(UUIDPrimaryKeyModel):
             5: self.score_bo5_games,
         }
 
-        async for p in predictions:
+        for p in predictions:
             # Add user to scores if not already in it
             if p.user not in scores:
                 scores[p.user] = ScoreboardEntry(p.user)

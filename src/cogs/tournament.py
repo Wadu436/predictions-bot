@@ -385,15 +385,22 @@ class TournamentCog(commands.Cog, name="Tournament"):
         await ctx.message.delete()
 
     @tournament_group.command(
-        name="info",
-        brief="Shows info on a tournament.",
-        description="Shows info on a tournament in this server. If no name is given, it shows info on the currently running tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.",
-        aliases=["i"],
-        usage="[tournament name]",
+        name="leaderboard",
+        brief="Shows leaderboard of a tournament.",
+        description="Shows the leaderboard of a tournament in this server. If no name is given, it shows info on the currently running tournament in this channel.\n\nArguments:\n-Tournament name can contain spaces.\n-Tab is optional and should be preceded by a : after the tournament name, if none is provided it will give the leaderboard of the entire tournament.",
+        aliases=["lb"],
+        usage="[tournament name][:<tab>]",
     )
     @commands.guild_only()
-    async def tournament_show(self, ctx, *, name: Optional[str]):
+    async def tournament_leaderboard(self, ctx, *, name: Optional[str]):
+        tabs = None
+
         if name is not None:
+            if ":" in name:
+                tokens = name.split(":", maxsplit=1)
+                name = tokens[0]
+                tabs = [tokens[1]]
+
             tournament = await models.Tournament.get_or_none(
                 name=name,
                 guild=ctx.guild.id,
@@ -410,8 +417,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if tournament is None:
             raise TournamentException(f"Could not find tournament ({txt})")
 
-        content = await self.tournament_manager.generate_tournament_text(tournament)
-        await ctx.send(content + "\n`This message does not get updated.`")
+        content = await self.tournament_manager.generate_leaderboard_text(
+            tournament,
+            tabs,
+        )
+        await ctx.send(content)
 
     @tournament_group.command(
         name="setupdates",
@@ -465,6 +475,42 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
         for page in paginator.pages:
             await ctx.send(page)
+
+    @tournament_group.command(
+        name="tabs",
+        brief="Shows the tabs in a tournament.",
+        description="Shows the tabs in a tournament in this server. If no name is given, it shows info on the currently running tournament in this channel. Only works for leaguepedia tournaments.\n\nArguments:\n-Tournament name can contain spaces.",
+        usage="[tournament name]",
+    )
+    @commands.guild_only()
+    async def tournament_tabs(self, ctx, *, name: Optional[str]):
+        if name is not None:
+            tournament = await models.Tournament.get_or_none(
+                name=name,
+                guild=ctx.guild.id,
+            )
+            txt = "There is no tournament with this name in this guild."
+        else:
+            tournament = await models.Tournament.get_or_none(
+                channel=ctx.channel.id,
+                running=models.TournamentRunningEnum.RUNNING,
+            )
+            txt = "There is no running tournament in this channel."
+
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(f"Could not find tournament ({txt})")
+
+        tabs = (
+            await models.Match.filter(
+                tournament=tournament, fandom_tab__not_isnull=True
+            )
+            .distinct()
+            .order_by("fandom_tab")
+            .values_list("fandom_tab", flat=True)
+        )
+        tabs = "\n".join(tabs)
+        await ctx.send(f"**{tournament.name} Tabs**\n{tabs}")
 
     @match_group.command(
         name="start",

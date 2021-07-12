@@ -111,7 +111,7 @@ class Site:
                 response_dict = json.loads(response_json)
                 if "error" in response_dict:
                     logging.error(
-                        f"APIException from following query: {query_url}, retrying..."
+                        f"APIException from following query: {query_url}, retrying...",
                     )
                     attempts += 1
                     continue
@@ -121,7 +121,7 @@ class Site:
             if "error" in response_dict:
                 # Tried max amount of times but still error
                 logging.error(
-                    f"APIException from following query: {query_url}, done retrying."
+                    f"APIException from following query: {query_url}, done retrying.",
                 )
                 raise APIException(
                     response_dict["error"]["code"],
@@ -184,7 +184,7 @@ class Site:
             response_dict = json.loads(response_json)
             if "error" in response_dict:
                 logging.error(
-                    f"APIException from following query: {query_url}, retrying..."
+                    f"APIException from following query: {query_url}, retrying...",
                 )
                 attempts += 1
                 continue
@@ -193,7 +193,7 @@ class Site:
 
         if "error" in response_dict:
             logging.error(
-                f"APIException from following query: {query_url}, done retrying."
+                f"APIException from following query: {query_url}, done retrying.",
             )
             raise APIException(
                 response_dict["error"]["code"],
