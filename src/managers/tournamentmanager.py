@@ -504,3 +504,16 @@ class TournamentManager:
             )
             for embed in embeds:
                 await channel.send(embed=embed)
+
+            tab_running_match_count = await models.Match.filter(
+                tournament=match.tournament,
+                fandom_tab=match.fandom_tab,
+                running__not=models.MatchRunningEnum.ENDED,
+            ).count()
+
+            if tab_running_match_count == 0:
+                content = await self.generate_leaderboard_text(
+                    match.tournament,
+                    [match.fandom_tab],
+                )
+                await channel.send(content)
