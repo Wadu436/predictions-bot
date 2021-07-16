@@ -65,7 +65,7 @@ class TournamentManager:
             percentage_str = f"{entry.percentage:.1f}%"
             str_list.append(f"({percentage_str:>{percent_size}})\n")
 
-        leaderboard_str = "".join(str_list)
+        return "".join(str_list)
 
     async def generate_leaderboard_text(
         self, tournament: models.Tournament, tabs: Optional[list[str]] = None
