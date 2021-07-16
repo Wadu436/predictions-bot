@@ -19,36 +19,44 @@ class TournamentManager:
     def __init__(self, client: discord.Client):
         self.client = client
 
-    async def generate_leaderboard_text(
+    async def format_leaderboard(
         self, tournament: models.Tournament, tabs: Optional[list[str]] = None
     ):
-        # Header
-        content_header = f"**{tournament.name} Leaderboard{' - ' + ' '.join(tabs) if tabs is not None else ''}**"
-
-        content_header += "\n\n"
-
         leaderboard = await tournament.calculate_leaderboard(tabs=tabs)
 
         # Calculate formatting
-        rank_size = len(str(len(leaderboard)))
+        rank_size = 0
         name_size = 0
         score_size = 0
         correct_size = 0
         percent_size = 0  # 100.0%
 
+        counter = itertools.count(1)
+        rank = 0
+        prev_score = -1
         for entry in leaderboard:
+            i = next(counter)
+            if prev_score != entry.score:
+                prev_score = entry.score
+                rank = i
+            rank_size = max(len(str(rank)), rank_size)
             name_size = max(len(entry.user.name), name_size)
             score_size = max(len(str(entry.score)), score_size)
             correct_size = max(len(str(f"{entry.correct}/{entry.total}")), correct_size)
             percent_size = max(len(f"{entry.percentage:.1f}%"), percent_size)
 
-        # Format the leaderboard
         counter = itertools.count(1)
+        rank = 0
+        prev_score = -1
         str_list = []
         for entry in leaderboard:
+            i = next(counter)
+            if entry.score != prev_score:
+                prev_score = entry.score
+                rank = i
             entry_correct = f"{entry.correct}/{entry.total}"
 
-            str_list.append(f"{next(counter):>{rank_size}}")
+            str_list.append(f"{rank:>{rank_size}}")
             str_list.append("  -  ")
             str_list.append(f"{entry.user.name:<{name_size}}  ")
             str_list.append(f"{entry.score:>{score_size}} points")
@@ -58,6 +66,17 @@ class TournamentManager:
             str_list.append(f"({percentage_str:>{percent_size}})\n")
 
         leaderboard_str = "".join(str_list)
+
+    async def generate_leaderboard_text(
+        self, tournament: models.Tournament, tabs: Optional[list[str]] = None
+    ):
+        # Header
+        content_header = f"**{tournament.name} Leaderboard{' - ' + ' '.join(tabs) if tabs is not None else ''}**"
+
+        content_header += "\n\n"
+
+        leaderboard_str = await self.format_leaderboard(tournament, tabs)
+
         if leaderboard_str:
             content_leaderboard = f"```c\n{leaderboard_str}```\n"
         else:
@@ -92,37 +111,7 @@ class TournamentManager:
         str_list.append("```\n")
         content_scoring_table = "".join(str_list)
 
-        leaderboard = await tournament.calculate_leaderboard()
-
-        # Calculate formatting
-        rank_size = len(str(len(leaderboard)))
-        name_size = 0
-        score_size = 0
-        correct_size = 0
-        percent_size = 0  # 100.0%
-
-        for entry in leaderboard:
-            name_size = max(len(entry.user.name), name_size)
-            score_size = max(len(str(entry.score)), score_size)
-            correct_size = max(len(str(f"{entry.correct}/{entry.total}")), correct_size)
-            percent_size = max(len(f"{entry.percentage:.1f}%"), percent_size)
-
-        # Format the leaderboard
-        counter = itertools.count(1)
-        str_list = []
-        for entry in leaderboard:
-            entry_correct = f"{entry.correct}/{entry.total}"
-
-            str_list.append(f"{next(counter):>{rank_size}}")
-            str_list.append("  -  ")
-            str_list.append(f"{entry.user.name:<{name_size}}  ")
-            str_list.append(f"{entry.score:>{score_size}} points")
-            str_list.append("  -  ")
-            str_list.append(f"{entry_correct:>{correct_size}} correct ")
-            percentage_str = f"{entry.percentage:.1f}%"
-            str_list.append(f"({percentage_str:>{percent_size}})\n")
-
-        leaderboard_str = "".join(str_list)
+        leaderboard_str = await self.format_leaderboard(tournament)
         if leaderboard_str:
             content_leaderboard = f"***Leaderboard***\n```c\n{leaderboard_str}```\n"
         else:
