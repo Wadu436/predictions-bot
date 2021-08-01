@@ -94,9 +94,13 @@ class Tournament(UUIDPrimaryKeyModel):
     score_bo3_games = fields.SmallIntField(default=1)
     score_bo5_games = fields.SmallIntField(default=1)
 
+    downstream_leaderboard: fields.ManyToManyRelation["Tournament"]
     leaderboard_include: fields.ManyToManyRelation[
         "Tournament"
-    ] = fields.ManyToManyField("models.Tournament")
+    ] = fields.ManyToManyField(
+        model_name="models.Tournament",
+        related_name="downstream_leaderboard",
+    )
 
     @property
     def is_fandom(self) -> bool:

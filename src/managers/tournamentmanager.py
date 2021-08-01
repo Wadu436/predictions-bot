@@ -456,8 +456,21 @@ class TournamentManager:
             tournament_message: discord.Message = await channel.fetch_message(
                 match.tournament.message
             )
-            new_content = await self.generate_tournament_text(match.tournament)
-            await tournament_message.edit(content=new_content)
+            await self.update_tournament_message(match.tournament)
+
+            # BFS
+            tournaments_to_update = []
+            new_tournaments = [match.tournament]
+            while len(new_tournaments) > 0:
+                new_tournament = new_tournaments.pop()
+                tournaments_to_update.append(new_tournament)
+                await new_tournament.fetch_related("downstream_leaderboard")
+                for t in new_tournament.downstream_leaderboard:
+                    if t not in tournaments_to_update and t not in new_tournaments:
+                        new_tournaments.append(t)
+
+            for t in tournaments_to_update:
+                await self.update_tournament_message(t)
 
         # Send update message if necesary
         if match.tournament.updates_channel is not None:
