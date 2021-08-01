@@ -235,6 +235,17 @@ class TournamentCog(commands.Cog, name="Tournament"):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
+    @tournament_group.group(
+        name="manage",
+        brief="Commands for managing tournaments.",
+        description="Commands for managing more advanced aspects of a tournament.",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_manage_group(self, ctx: commands.Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
     @commands.group(
         name="match",
         brief="Commands for interacting with matches.",
@@ -423,9 +434,107 @@ class TournamentCog(commands.Cog, name="Tournament"):
         )
         await ctx.send(content)
 
+    @tournament_manage_group.command(
+        name="include_leaderboard",
+        brief="Adds the scores from another tournament to this tournament's leaderboard.",
+        description="Adds the scores from another tournament to this tournament's leaderboard. \n\nArguments:\n-Tournament name can contain spaces.",
+        usage="<tournament name>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_includeleaderboard(self, ctx, *, name: str):
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no running tournament in this channel.)"
+            )
+
+        include_tournament = await models.Tournament.get_or_none(
+            name=name,
+            guild=ctx.guild.id,
+        )
+        # Check if tournament exists
+        if include_tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no tournament with this name in this guild.)"
+            )
+
+        await tournament.leaderboard_include.add(include_tournament)
+        await self.tournament_manager.update_tournament_message(tournament)
+
+        await ctx.send(
+            f"Included scores from '{include_tournament.name}' in '{tournament.name}'"
+        )
+
+    @tournament_manage_group.command(
+        name="exclude_leaderboard",
+        brief="Removes the scores from another tournament to this tournament's leaderboard.",
+        description="Removes the scores from another tournament to this tournament's leaderboard. \n\nArguments:\n-Tournament name can contain spaces.",
+        usage="<tournament name>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_excludeleaderboard(self, ctx, *, name: str):
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no running tournament in this channel.)"
+            )
+
+        include_tournament = await models.Tournament.get_or_none(
+            name=name,
+            guild=ctx.guild.id,
+        )
+        # Check if tournament exists
+        if include_tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no tournament with this name in this guild.)"
+            )
+
+        await tournament.leaderboard_include.remove(include_tournament)
+        await self.tournament_manager.update_tournament_message(tournament)
+
+        await ctx.send(
+            f"Removed scores from '{include_tournament.name}' in '{tournament.name}'"
+        )
+
+    @tournament_manage_group.command(
+        name="list_leaderboards",
+        brief="Lists included leaderboards.",
+        description="Lists which other tournament's leaderboards are included in this one.",
+        usage="",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_listleaderboard(self, ctx):
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no running tournament in this channel.)"
+            )
+
+        included_tournaments = await tournament.leaderboard_include
+        if len(included_tournaments) > 0:
+            tr_string = "\n".join([t.name for t in included_tournaments])
+            await ctx.send(f"Included leaderboards:\n**{tr_string}**")
+        else:
+            await ctx.send("This tournament does not include any other leaderboards.")
+
     @tournament_group.command(
         name="setupdates",
-        brief="Sets this channel to display updates on the tournament (Who predicted correctly, etc.).",
+        brief="Sets this channel to display updates on the tournament (Who predicted correctly, etc).",
         description="Sets this channel to display updates on the tournament (Who predicted correctly, etc.).\n\nArguments:\n-Tournament name can contain spaces.",
         usage="<tournament name>",
     )

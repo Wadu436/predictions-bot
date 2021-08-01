@@ -1,3 +1,4 @@
+import asyncio
 import math
 from dataclasses import dataclass
 from enum import IntEnum
@@ -32,6 +33,14 @@ class ScoreboardEntry:
 
     def __str__(self):
         return f"{self.user.name} = Score: {self.score} - Correct: {self.correct} - Total: {self.total} ({self.percentage:.1f}%)"
+
+    def __add__(self, other: "ScoreboardEntry") -> "ScoreboardEntry":
+        return ScoreboardEntry(
+            self.user,
+            self.score + other.score,
+            self.correct + other.correct,
+            self.total + other.total,
+        )
 
 
 class UUIDPrimaryKeyModel(Model):
@@ -85,17 +94,34 @@ class Tournament(UUIDPrimaryKeyModel):
     score_bo3_games = fields.SmallIntField(default=1)
     score_bo5_games = fields.SmallIntField(default=1)
 
+    leaderboard_include: fields.ManyToManyRelation[
+        "Tournament"
+    ] = fields.ManyToManyField("models.Tournament")
+
     @property
     def is_fandom(self) -> bool:
         return self.fandom_overview_page is not None
 
-    async def calculate_leaderboard(
+    async def __calculate_leaderboard_dict(
         self,
         tabs: Optional[list[str]] = None,
-    ) -> list[ScoreboardEntry]:
+    ) -> dict["User", ScoreboardEntry]:
         matches: list[UUID]
 
-        scores: dict[str, ScoreboardEntry] = {}
+        scores: dict["User", ScoreboardEntry] = {}
+
+        if tabs is None:
+            leaderboards_to_include = await asyncio.gather(
+                *(
+                    t.__calculate_leaderboard_dict()
+                    for t in await self.leaderboard_include
+                ),
+            )
+            for lb in leaderboards_to_include:
+                for user, entry in lb.items():
+                    if user not in scores:
+                        scores[user] = ScoreboardEntry(user)
+                    scores[user] += entry
 
         if tabs is None:
             matches = await Match.filter(
@@ -139,6 +165,14 @@ class Tournament(UUIDPrimaryKeyModel):
 
             if p.match.games == p.games:  # type: ignore
                 se.score += games_score_table[p.match.bestof]
+
+        return scores
+
+    async def calculate_leaderboard(
+        self,
+        tabs: Optional[list[str]] = None,
+    ) -> list[ScoreboardEntry]:
+        scores = await self.__calculate_leaderboard_dict(tabs)
 
         leaderboard = list(scores.values())
         leaderboard.sort(key=lambda entry: entry.user.name)
