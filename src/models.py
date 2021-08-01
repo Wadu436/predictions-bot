@@ -105,23 +105,32 @@ class Tournament(UUIDPrimaryKeyModel):
     async def __calculate_leaderboard_dict(
         self,
         tabs: Optional[list[str]] = None,
+        already_included: list["Tournament"] = None,
     ) -> dict["User", ScoreboardEntry]:
         matches: list[UUID]
 
         scores: dict["User", ScoreboardEntry] = {}
 
-        if tabs is None:
-            leaderboards_to_include = await asyncio.gather(
-                *(
-                    t.__calculate_leaderboard_dict()
-                    for t in await self.leaderboard_include
-                ),
-            )
-            for lb in leaderboards_to_include:
-                for user, entry in lb.items():
-                    if user not in scores:
-                        scores[user] = ScoreboardEntry(user)
-                    scores[user] += entry
+        if tabs is None and self._saved_in_db:
+            if already_included is None:
+                already_included = []
+
+            if self not in already_included:
+                already_included.append(self)
+                leaderboards_to_include = await asyncio.gather(
+                    *(
+                        t.__calculate_leaderboard_dict(
+                            already_included=already_included,
+                        )
+                        for t in await self.leaderboard_include
+                        if t not in already_included
+                    ),
+                )
+                for lb in leaderboards_to_include:
+                    for user, entry in lb.items():
+                        if user not in scores:
+                            scores[user] = ScoreboardEntry(user)
+                        scores[user] += entry
 
         if tabs is None:
             matches = await Match.filter(
