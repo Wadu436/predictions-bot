@@ -111,8 +111,26 @@ class TournamentCog(commands.Cog, name="Tournament"):
             ) not in db_matches:
                 if fandommatch.winner is None:
                     # Match does not exist yet
-                    team1 = teams[fandommatch.team1]
-                    team2 = teams[fandommatch.team2]
+                    team1 = teams.get(fandommatch.team1)
+                    team2 = teams.get(fandommatch.team2)
+
+                    if team1 is None or team2 is None:
+                        # Update teams
+                        await self.update_fandom_teams(
+                            tournament.fandom_overview_page,
+                            tournament.guild,
+                        )
+                        # Reload teams
+                        teams = await models.Team.filter(
+                            guild=tournament.guild
+                        ).exclude(fandom_overview_page=None)
+                        teams = {t.fandom_overview_page: t for t in teams}
+                        team1 = teams.get(fandommatch.team1)
+                        team2 = teams.get(fandommatch.team2)
+
+                    if team1 is None or team2 is None:
+                        # If the team is still not here, skip the match
+                        continue
 
                     try:
                         await self.tournament_manager.start_match(
