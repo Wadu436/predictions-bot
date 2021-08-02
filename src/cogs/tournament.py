@@ -103,6 +103,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         }
         for fandommatch in fandommatches:
             # Check if match already exists
+            if fandommatch.team1 == "TBD" or fandommatch.team2 == "TBD":
+                continue
             if (
                 fandommatch.tab,
                 fandommatch.initialn_matchintab,
