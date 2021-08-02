@@ -291,12 +291,22 @@ class TournamentManager:
         await self.update_tournament_message(tournament)
 
     async def update_tournament_message(self, tournament: models.Tournament):
-        channel: discord.TextChannel = self.client.get_channel(tournament.channel)
-        tournament_message: discord.Message = await channel.fetch_message(
-            tournament.message
-        )
-        new_content = await self.generate_tournament_text(tournament)
-        await tournament_message.edit(content=new_content)
+        # BFS
+        tournaments_to_update = []
+        new_tournaments = [tournament]
+        while len(new_tournaments) > 0:
+            new_tournament = new_tournaments.pop()
+            tournaments_to_update.append(new_tournament)
+            await new_tournament.fetch_related("downstream_leaderboard")
+            for t in new_tournament.downstream_leaderboard:
+                if t not in tournaments_to_update and t not in new_tournaments:
+                    new_tournaments.append(t)
+
+        for t in tournaments_to_update:
+            channel: discord.TextChannel = self.client.get_channel(t.channel)
+            tournament_message: discord.Message = await channel.fetch_message(t.message)
+            new_content = await self.generate_tournament_text(t)
+            await tournament_message.edit(content=new_content)
 
     async def update_match_message(self, match: models.Match):
         await match.fetch_related("tournament")
@@ -453,24 +463,7 @@ class TournamentManager:
         await self.update_match_message(match)
 
         if update_tournament_message:
-            tournament_message: discord.Message = await channel.fetch_message(
-                match.tournament.message
-            )
             await self.update_tournament_message(match.tournament)
-
-            # BFS
-            tournaments_to_update = []
-            new_tournaments = [match.tournament]
-            while len(new_tournaments) > 0:
-                new_tournament = new_tournaments.pop()
-                tournaments_to_update.append(new_tournament)
-                await new_tournament.fetch_related("downstream_leaderboard")
-                for t in new_tournament.downstream_leaderboard:
-                    if t not in tournaments_to_update and t not in new_tournaments:
-                        new_tournaments.append(t)
-
-            for t in tournaments_to_update:
-                await self.update_tournament_message(t)
 
         # Send update message if necesary
         if match.tournament.updates_channel is not None:
