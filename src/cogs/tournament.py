@@ -75,7 +75,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
     async def update_fandom_matches(self, tournament: models.Tournament):
         fandom_tabs = await leaguepedia.get_tabs_before(
             tournament.fandom_overview_page,
-            datetime.now(tz=timezone.utc) + timedelta(days=4),
+            datetime.now(tz=timezone.utc) + timedelta(days=4, hours=12),
         )
 
         fandommatches = await leaguepedia.get_matches_in_tabs(
