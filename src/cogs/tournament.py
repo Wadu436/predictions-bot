@@ -552,6 +552,52 @@ class TournamentCog(commands.Cog, name="Tournament"):
         else:
             await ctx.send("This tournament does not include any other leaderboards.")
 
+    @tournament_manage_group.command(
+        name="set_score",
+        brief="Changes the scoring table.",
+        description="Changes the scoring table of the running tournament.",
+        usage="<team/games> <bo1/bo3/bo5> <score>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def tournament_setscore(self, ctx, option: str, bo_x: str, score: int):
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.TournamentRunningEnum.RUNNING,
+        )
+        # Check if tournament exists
+        if tournament is None:
+            raise TournamentException(
+                "Could not find tournament (There is no running tournament in this channel.)"
+            )
+
+        option = option.lower()
+        bo_x = bo_x.lower()
+
+        if option == "team":
+            if bo_x == "bo1":
+                tournament.score_bo1_team = score
+            elif bo_x == "bo3":
+                tournament.score_bo3_team = score
+            elif bo_x == "bo5":
+                tournament.score_bo5_team = score
+            else:
+                raise TournamentException("Invalid second argument")
+        elif option == "games":
+            if bo_x == "bo3":
+                tournament.score_bo3_games = score
+            elif bo_x == "bo5":
+                tournament.score_bo5_games = score
+            else:
+                raise TournamentException("Invalid second argument")
+        else:
+            raise TournamentException("Invalid first argument")
+
+        await tournament.save()
+
+        await self.tournament_manager.update_tournament_message(tournament)
+        await ctx.send("Updated scoring table.")
+
     @tournament_group.command(
         name="setupdates",
         brief="Sets this channel to display updates on the tournament (Who predicted correctly, etc).",
