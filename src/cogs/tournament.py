@@ -275,9 +275,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
             return False
 
-        coro_list = [add_team(t) for t in teams_to_create].extend(
-            [update_emoji(t) for t in teams_to_update]
-        )
+        coro_list = [add_team(t) for t in teams_to_create]
+        coro_list.extend([update_emoji(t) for t in teams_to_update])
         return any(await asyncio.gather(*coro_list))
 
     # ----------------------------- GROUPS -----------------------------
