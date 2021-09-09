@@ -228,12 +228,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
             elif not t.is_fandom:
                 # Take control of teams with the correct name already
                 t.fandom_overview_page = team.overviewPage
-
-                # Check if the emote actually exists
-                if self.bot.get_emoji(t.emoji) is None:
-                    teams_to_update.append(t)
-
                 await t.save()
+
+            # Check if the emote actually exists
+            if self.bot.get_emoji(t.emoji) is None:
+                teams_to_update.append(t)
 
         # Return true if there was an error
         async def add_team(team: TeamsRow) -> bool:
