@@ -51,14 +51,17 @@ class TournamentCog(commands.Cog, name="Tournament"):
         self.update_fandom_matches_task.add_exception_type(
             APIException, ServerException
         )
+        self.update_fandom_teams_task.add_exception_type(APIException, ServerException)
 
     def cog_unload(self):
         self.update_fandom_matches_task.stop()
+        self.update_fandom_teams_task.stop()
 
     @commands.Cog.listener()
     async def on_ready(self):
         logging.debug("Starting Fandom task.")
         self.update_fandom_matches_task.start()
+        self.update_fandom_teams_task.start()
 
     # ------------------------------ TASKS -----------------------------
 
