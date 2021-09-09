@@ -225,14 +225,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
             t = discord.utils.get(guild_teams, code=team.short.lower())
             if t is None:
                 teams_to_create.append(team)
-            elif not t.is_fandom:
-                # Take control of teams with the correct name already
-                t.fandom_overview_page = team.overviewPage
-                await t.save()
+            else:
+                if not t.is_fandom:
+                    # Take control of teams with the correct name already
+                    t.fandom_overview_page = team.overviewPage
+                    await t.save()
 
-            # Check if the emote actually exists
-            if self.bot.get_emoji(t.emoji) is None:
-                teams_to_update.append(t)
+                # Check if the emote actually exists
+                if self.bot.get_emoji(t.emoji) is None:
+                    teams_to_update.append(t)
 
         # Return true if there was an error
         async def add_team(team: TeamsRow) -> bool:
