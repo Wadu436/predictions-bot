@@ -203,6 +203,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
         guild_teams = await models.Team.filter(guild=guild_id)
 
         teams_to_create: list[TeamsRow] = []
+        teams_to_update: list[models.Team] = []
 
         # Figure out which teams we need to add
         for team in teams:
@@ -212,9 +213,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
             elif not t.is_fandom:
                 # Take control of teams with the correct name already
                 t.fandom_overview_page = team.overviewPage
-                await t.save()
 
-        error = False
+                # Check if the emote actually exists
+                if self.bot.get_emoji(t.emoji) is None:
+                    teams_to_update.append(t)
+
+                await t.save()
 
         # Return true if there was an error
         async def add_team(team: TeamsRow) -> bool:
@@ -239,7 +243,27 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
             return False
 
-        coro_list = [add_team(t) for t in teams_to_create]
+        # Return true if there was an error
+        async def update_emoji(team: models.Team) -> bool:
+            # page_info = await leaguepedia.get_page_info(team.overviewPage, ["images"])
+            team_image = f"{team.fandom_overview_page}logo square.png"
+            img = await leaguepedia.get_file(team_image, size=256)
+            try:
+                emoji: discord.Emoji = await guild.create_custom_emoji(
+                    name=team.code, image=img
+                )
+            except discord.errors.HTTPException:
+                return True
+
+            team.emoji = emoji.id
+
+            await team.save()
+
+            return False
+
+        coro_list = [add_team(t) for t in teams_to_create].extend(
+            [update_emoji(t) for t in teams_to_update]
+        )
         return any(await asyncio.gather(*coro_list))
 
     # ----------------------------- GROUPS -----------------------------
