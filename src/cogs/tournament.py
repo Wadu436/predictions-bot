@@ -70,7 +70,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
         ).exclude(fandom_overview_page="")
         for tournament in fandom_tournaments:
             await self.update_fandom_matches(tournament)
-        logging.debug("Fandom task done.")
+        logging.debug("Fandom matches task done.")
+
+    @tasks.loop(minutes=60, reconnect=True)
+    async def update_fandom_teams_task(self):
+        logging.debug("Running Fandom task.")
+        fandom_tournaments = await models.Tournament.filter(
+            running=models.TournamentRunningEnum.RUNNING
+        ).exclude(fandom_overview_page="")
+        for tournament in fandom_tournaments:
+            await self.update_fandom_teams(
+                tournament.fandom_overview_page, tournament.guild
+            )
+        logging.debug("Fandom team task done.")
 
     async def update_fandom_matches(self, tournament: models.Tournament):
         fandom_tabs = await leaguepedia.get_tabs_before(
