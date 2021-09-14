@@ -56,6 +56,8 @@ class Team(UUIDPrimaryKeyModel):
     emoji = fields.BigIntField()
     guild = fields.BigIntField()
 
+    info = fields.TextField(null=True, default=None)
+
     fandom_overview_page = fields.TextField(null=True)
 
     bot_created = fields.BooleanField(default=False)

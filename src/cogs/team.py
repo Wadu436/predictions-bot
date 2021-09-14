@@ -1,3 +1,5 @@
+from typing import Optional
+
 import discord
 import tortoise.exceptions
 from discord.ext import commands
@@ -234,6 +236,44 @@ class TeamsCog(commands.Cog, name="Teams"):
                     value=f"Code: `{team.code}`",
                 )
             await ctx.send(embed=embed)
+
+    @team_group.command(
+        name="addinfo",
+        brief="Add info message.",
+        description="Adds/updates an info message to this team. You can display the message with the `team info` command. If the message is left empty, it removes the current message.",
+        usage="<team code> [message]",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def team_add_info(self, ctx, code: str, *, message: Optional[str]):
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
+        team.info = message
+        await team.save()
+        if message:
+            await ctx.send(f"Added info for {team.name}")
+        else:
+            await ctx.send(f"Removed info for {team.name}")
+
+    @team_group.command(
+        name="info",
+        brief="Show team info.",
+        description="Shows a team's info message.",
+        usage="<team code>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def team_show_info(self, ctx, code: str):
+        try:
+            team = await models.Team.get(code=code, guild=ctx.guild.id)
+        except tortoise.exceptions.DoesNotExist:
+            raise TeamException(f"There is no team with code {code}.")
+        if team.info:
+            await ctx.send(team.info)
+        else:
+            await ctx.send(f"No info available for {team.name}")
 
     async def cog_command_error(self, ctx, error):
         message = ""
