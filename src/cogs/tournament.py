@@ -93,6 +93,15 @@ class TournamentCog(commands.Cog, name="Tournament"):
             datetime.now(tz=timezone.utc) + timedelta(days=4, hours=12),
         )
 
+        if len(fandom_tabs) == 0:
+            matches_exist = await tournament.matches.all().exists()
+            if not matches_exist:
+                first_tab = await leaguepedia.get_first_tab(
+                    tournament.fandom_overview_page
+                )
+                if first_tab:
+                    fandom_tabs.append(first_tab)
+
         fandommatches = await leaguepedia.get_matches_in_tabs(
             tournament.fandom_overview_page,
             fandom_tabs,

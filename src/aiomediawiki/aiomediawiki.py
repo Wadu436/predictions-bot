@@ -310,6 +310,22 @@ class Leaguepedia(Site):
         )
         return [row["Tab"] for row in result]
 
+    async def get_first_tab(
+        self,
+        overviewpage: str,
+    ) -> Optional[str]:
+        result = await self.cargo_query(
+            tables=MatchScheduleRow.table,
+            fields="Tab",
+            where=f"OverviewPage='{overviewpage}'",
+            group_by="Tab",
+            order_by="DateTime_UTC",
+        )
+        if result:
+            return result[0]["Tab"]
+        else:
+            return None
+
     async def get_team(self, name: str) -> Optional[TeamsRow]:
         result = await self.cargo_query(
             tables=TeamsRow.table,
