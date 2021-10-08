@@ -210,7 +210,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                                     message = f"There was a problem closing match {match.id_in_tournament}."
 
                                 if channel is not None:
-                                    channel.send(message)
+                                    await channel.send(message)
                                     self.fandommatch_errors.add(match.id)
 
                             continue
