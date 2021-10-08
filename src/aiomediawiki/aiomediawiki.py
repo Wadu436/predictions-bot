@@ -36,6 +36,23 @@ def _construct_url(api_endpoint, **kwargs):
     return url
 
 
+async def get_url_json(query_url):
+    async with aiohttp.ClientSession() as session:
+        logging.debug(f"aiomediawiki: GET '{query_url}'")
+        async with session.get(query_url) as response:
+            logging.debug(f"aiomediawiki: RESPONSE: '{response}'")
+            if response.status != 200:
+                raise ServerException(
+                    f"HTTP Error. Status code: {response.status}.",
+                )
+            if response.content_type != "application/json":
+                raise ServerException(
+                    "Response error. Website did not return json format.",
+                )
+            response_json = await response.text()
+    return response_json
+
+
 class Site:
     site: str
     api_path: str
@@ -96,17 +113,7 @@ class Site:
             while attempts < max_attempts:
                 kwargs["offset"] = len(results)
                 query_url = _construct_url(self.api_url, **kwargs)
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(query_url) as response:
-                        if response.status != 200:
-                            raise ServerException(
-                                f"HTTP Error. Status code: {response.status}.",
-                            )
-                        if response.content_type != "application/json":
-                            raise ServerException(
-                                "Response error. Website did not return json format.",
-                            )
-                        response_json = await response.text()
+                response_json = await get_url_json(query_url)
 
                 response_dict = json.loads(response_json)
                 if "error" in response_dict:
@@ -169,17 +176,7 @@ class Site:
 
         attempts = 0
         while attempts < max_attempts:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(query_url) as response:
-                    if response.status != 200:
-                        raise ServerException(
-                            f"HTTP Error. Status code: {response.status}.",
-                        )
-                    if response.content_type != "application/json":
-                        raise ServerException(
-                            "Response error. Website did not return json format.",
-                        )
-                    response_json = await response.text()
+            response_json = await get_url_json(query_url)
 
             response_dict = json.loads(response_json)
             if "error" in response_dict:
