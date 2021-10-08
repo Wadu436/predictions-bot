@@ -130,7 +130,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
             (m.fandom_tab, m.fandom_initialn_matchintab): m for m in db_matches
         }
 
-        logging.debug(f"Fandom Matches: {fandommatches}")
+        matches_debug = "\n".join(map(str, fandommatches))
+        logging.debug(f"Fandom Matches:\n{matches_debug}")
         for fandommatch in fandommatches:
             # Check if match already exists
             if fandommatch.team1 == "TBD" or fandommatch.team2 == "TBD":
@@ -194,6 +195,19 @@ class TournamentCog(commands.Cog, name="Tournament"):
 
                         # Safety check on the teams
                         if (
+                            fandommatch.team1 == match.team2.fandom_overview_page
+                            and fandommatch.team2 == match.team1.fandom_overview_page
+                        ):
+                            tmp = fandommatch.team1
+                            fandommatch.team1 = fandommatch.team2
+                            fandommatch.team2 = tmp
+
+                            tmp = fandommatch.team1_score
+                            fandommatch.team1_score = fandommatch.team2_score
+                            fandommatch.team2_score = tmp
+
+                            fandommatch.winner = 3 - fandommatch.winner  # 1->2, 2->1
+                        elif (
                             fandommatch.team1 != match.team1.fandom_overview_page
                             or fandommatch.team2 != match.team2.fandom_overview_page
                         ):
