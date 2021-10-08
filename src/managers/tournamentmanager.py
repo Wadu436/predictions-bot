@@ -1,5 +1,6 @@
 import io
 import itertools
+import logging
 import math
 from typing import Optional
 
@@ -369,9 +370,13 @@ class TournamentManager:
             for i in range(math.floor(bestof / 2), bestof):
                 await message.add_reaction(games_emojis[i])
 
+        logging.debug(f"Started match {match}")
+
         return match
 
     async def close_match(self, match: models.Match, update_message=True):
+        logging.debug(f"Closing match {match}")
+
         # Safeguard
         if match.running != models.MatchRunningEnum.RUNNING:
             return
@@ -448,6 +453,7 @@ class TournamentManager:
     async def end_match(
         self, match: models.Match, team: int, games: int, update_tournament_message=True
     ):
+        logging.debug(f"Ending match {match}")
         if match.running == models.MatchRunningEnum.RUNNING:
             await self.close_match(match, update_message=False)
 

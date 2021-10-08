@@ -88,10 +88,14 @@ class TournamentCog(commands.Cog, name="Tournament"):
         logging.debug("Fandom team task done.")
 
     async def update_fandom_matches(self, tournament: models.Tournament):
+        logging.debug(f"Updating matches for tournament {tournament.name}")
+
         fandom_tabs = await leaguepedia.get_tabs_before(
             tournament.fandom_overview_page,
             datetime.now(tz=timezone.utc) + timedelta(days=4, hours=12),
         )
+
+        logging.debug(f"Tabs: {fandom_tabs}")
 
         if len(fandom_tabs) == 0:
             matches_exist = await tournament.matches.all().exists()
@@ -125,6 +129,8 @@ class TournamentCog(commands.Cog, name="Tournament"):
         db_matches = {
             (m.fandom_tab, m.fandom_initialn_matchintab): m for m in db_matches
         }
+
+        logging.debug(f"Fandom Matches: {fandommatches}")
         for fandommatch in fandommatches:
             # Check if match already exists
             if fandommatch.team1 == "TBD" or fandommatch.team2 == "TBD":
@@ -157,6 +163,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                         continue
 
                     try:
+                        logging.debug(f"Starting match {fandommatch}")
                         await self.tournament_manager.start_match(
                             tournament,
                             name=f"{fandommatch.tab} Match {fandommatch.n_matchintab}",
@@ -179,6 +186,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                         and fandommatch.winner is None
                     ):
                         # Match should be closed, but is not over yet (no result)
+                        logging.debug(f"Closing match {fandommatch}")
                         await self.tournament_manager.close_match(match)
 
                     if fandommatch.winner is not None:
@@ -208,6 +216,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                             continue
 
                         any_ended = True
+                        logging.debug(f"Ending match {fandommatch}")
                         await self.tournament_manager.end_match(
                             match,
                             fandommatch.winner,
