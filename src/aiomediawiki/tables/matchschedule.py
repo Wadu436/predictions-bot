@@ -17,6 +17,7 @@ class MatchScheduleRow:
         "Tab",
         "N_MatchInTab",
         "InitialN_MatchInTab",
+        "IsTiebreaker",
     }
     table = "MatchSchedule"
 
@@ -36,6 +37,8 @@ class MatchScheduleRow:
     initialn_matchintab: int
     matchday: int
 
+    is_tiebreaker: bool
+
     @classmethod
     def from_row(cls, row):
         start = datetime.strptime(row["DateTime UTC"], "%Y-%m-%d %H:%M:%S")
@@ -53,4 +56,5 @@ class MatchScheduleRow:
             n_matchintab=int(row["N MatchInTab"]),
             initialn_matchintab=int(row["InitialN MatchInTab"]),
             matchday=int(row["MatchDay"]),
+            is_tiebreaker=bool(int(row["IsTiebreaker"])),
         )

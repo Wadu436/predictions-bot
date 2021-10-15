@@ -106,9 +106,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
                 if first_tab:
                     fandom_tabs.append(first_tab)
 
-        fandommatches = await leaguepedia.get_matches_in_tabs(
-            tournament.fandom_overview_page,
-            fandom_tabs,
+        fandommatches = filter(
+            lambda msr: not msr.is_tiebreaker,
+            await leaguepedia.get_matches_in_tabs(
+                tournament.fandom_overview_page,
+                fandom_tabs,
+            ),
         )
         any_ended: bool = False
         matchdays_to_close: set[str, int] = {
