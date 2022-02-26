@@ -225,10 +225,10 @@ class TournamentCog(commands.Cog, name="Tournament"):
 f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
 Debug info:
 ```
-Expected {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
-API returned {fandommatch.team1} vs {fandommatch.team2}
+DB Teams: {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
 DB Leaguepedia Tab: {match.fandom_tab}
 DB Leaguepedia InitialN_MatchInTab: {match.fandom_initialn_matchintab}
+API Teams: {fandommatch.team1} vs {fandommatch.team2}
 API Leaguepedia Tab: {fandommatch.tab}
 API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
 ```
