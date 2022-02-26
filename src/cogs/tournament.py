@@ -218,11 +218,11 @@ class TournamentCog(commands.Cog, name="Tournament"):
                                 if tournament.updates_channel is not None:
                                     channel_id = tournament.updates_channel
                                     channel = self.bot.get_channel(channel_id)
-                                    message = f"There was a problem closing match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention})."
+                                    message = f"There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).\nExpected {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}. API returned {fandommatch.team1} vs {fandommatch.team2}."
                                 else:
                                     channel_id = tournament.channel
                                     channel = self.bot.get_channel(channel_id)
-                                    message = f"There was a problem closing match {match.id_in_tournament}."
+                                    message = f"There was a problem ending match {match.id_in_tournament}.\nExpected {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}. API returned {fandommatch.team1} vs {fandommatch.team2}."
 
                                 if channel is not None:
                                     await channel.send(message)
