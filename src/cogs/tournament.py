@@ -221,8 +221,7 @@ class TournamentCog(commands.Cog, name="Tournament"):
                                 else:
                                     channel_id = tournament.channel
                                     channel = self.bot.get_channel(channel_id)
-                                message = \
-f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
+                                message = f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
 Debug info:
 ```
 DB Teams: {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
@@ -817,6 +816,46 @@ API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
             team2,
         )
 
+        await ctx.message.delete()
+
+    @match_group.command(
+        name="delete",
+        brief="Deletes a match.",
+        description='Deletes a match. Can be used in case some extraordinary shit happens ¯\\_(ツ)_/¯.\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces\n-You can also specify a range of match ids with a - (e.g. 22-24 would mean ids 22, 23 and 23)',
+        aliases=["c"],
+        usage="<ids>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def match_delete(self, ctx, *ids_string: str):
+        # Validate input
+        # Check if tournament running
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
+        )
+        if tournament is None:
+            raise TournamentException("There is no running tournament in this channel.")
+
+        ids = []
+        for id_string in ids_string:
+            if id_string.isdigit():
+                ids.append(int(id_string))
+            else:
+                s = id_string.split(sep="-")
+                if len(s) == 2 and s[0].isdigit() and s[1].isdigit():
+                    start = int(s[0])
+                    stop = int(s[1]) + 1
+                    ids.extend(list(range(start, stop)))
+
+        matches = await models.Match.filter(
+            tournament=tournament,
+            id_in_tournament__in=ids,
+            running=models.MatchRunningEnum.RUNNING,
+        )
+
+        coro_list = [self.tournament_manager.delete_match(match) for match in matches]
+        asyncio.gather(*coro_list)
         await ctx.message.delete()
 
     @match_group.command(

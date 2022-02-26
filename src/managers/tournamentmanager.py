@@ -18,7 +18,7 @@ class TournamentManager:
     client: discord.Client
 
     def __init__(self, client: discord.Client):
-        self.client = client
+        self.client: discord.Client = client
 
     async def format_leaderboard(
         self, tournament: models.Tournament, tabs: Optional[list[str]] = None
@@ -449,6 +449,17 @@ class TournamentManager:
 
         if update_message:
             await self.update_match_message(match)
+
+    async def delete_match(self, match: models.Match):
+        logging.debug(f"Deleting match {match}")
+
+        # Delete match message
+        channel: discord.TextChannel = self.client.get_channel(match.tournament.channel)
+        match_message: discord.Message = await channel.fetch_message(match.message)
+        await match_message.delete()
+
+        # Delete match
+        await match.delete()
 
     async def end_match(
         self, match: models.Match, team: int, games: int, update_tournament_message=True
