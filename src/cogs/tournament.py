@@ -851,7 +851,6 @@ API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
         matches = await models.Match.filter(
             tournament=tournament,
             id_in_tournament__in=ids,
-            running=models.MatchRunningEnum.RUNNING,
         )
 
         coro_list = [self.tournament_manager.delete_match(match) for match in matches]

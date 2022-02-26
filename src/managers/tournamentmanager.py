@@ -453,6 +453,8 @@ class TournamentManager:
     async def delete_match(self, match: models.Match):
         logging.debug(f"Deleting match {match}")
 
+        await match.fetch_related("tournament")
+
         # Delete match message
         channel: discord.TextChannel = self.client.get_channel(match.tournament.channel)
         match_message: discord.Message = await channel.fetch_message(match.message)
