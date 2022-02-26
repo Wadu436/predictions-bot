@@ -1,0 +1,15 @@
+version: "2.2"
+services:
+        predictions:
+                container_name: predictions
+                build: .
+                command:
+                        [
+                                "/bin/bash",
+                                "-c",
+                                "pip install debugpy -t /tmp && aerich upgrade && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 main.py"
+                        ]
+                network_mode: "host"
+                restart: unless-stopped
+                ports:
+                        - 5678:5678
