@@ -221,18 +221,18 @@ class TournamentCog(commands.Cog, name="Tournament"):
                                 else:
                                     channel_id = tournament.channel
                                     channel = self.bot.get_channel(channel_id)
-                                message = f"""
-                                    There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
-                                    Debug info:
-                                    ```
-                                    Expected {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
-                                    API returned {fandommatch.team1} vs {fandommatch.team2}
-                                    DB Leaguepedia Tab: {match.fandom_tab}
-                                    DB Leaguepedia InitialN_MatchInTab: {match.fandom_initialn_matchintab}
-                                    API Leaguepedia Tab: {fandommatch.tab}
-                                    API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
-                                    ```
-                                    """
+                                message = \
+f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
+Debug info:
+```
+Expected {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
+API returned {fandommatch.team1} vs {fandommatch.team2}
+DB Leaguepedia Tab: {match.fandom_tab}
+DB Leaguepedia InitialN_MatchInTab: {match.fandom_initialn_matchintab}
+API Leaguepedia Tab: {fandommatch.tab}
+API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
+```
+"""
 
                                 if channel is not None:
                                     await channel.send(message)
