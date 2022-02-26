@@ -822,7 +822,7 @@ API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
         name="delete",
         brief="Deletes a match.",
         description='Deletes a match. Can be used in case some extraordinary shit happens ¯\\_(ツ)_/¯.\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces\n-You can also specify a range of match ids with a - (e.g. 22-24 would mean ids 22, 23 and 23)',
-        aliases=["c"],
+        aliases=["d"],
         usage="<ids>",
     )
     @commands.guild_only()
