@@ -965,6 +965,51 @@ API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
         await ctx.message.delete()
 
     @match_group.command(
+        name="unend",
+        brief="Un-ends a match.",
+        description='Un-ends the match. Should only be used if the wiki fucks up or something.\n\nArguments:\n\nArguments:\n-Match ids, which is the number in the match message before the dot (e.g. in "23. Group Stage Game 4", the match id is 23).\n-The match ids should be seperated by spaces-You can also specify a range of match ids with a - (e.g. 22-24 would mean ids 22, 23 and 23)',
+        usage="<ids>",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def match_unend(self, ctx, *ids_string: str):
+        # Validate input
+        # Check if tournament running
+        tournament = await models.Tournament.get_or_none(
+            channel=ctx.channel.id,
+            running=models.MatchRunningEnum.RUNNING,
+        )
+        if tournament is None:
+            raise TournamentException("There is no running tournament in this channel.")
+
+        ids = []
+        for id_string in ids_string:
+            if id_string.isdigit():
+                ids.append(int(id_string))
+            else:
+                s = id_string.split(sep="-")
+                if len(s) == 2 and s[0].isdigit() and s[1].isdigit():
+                    start = int(s[0])
+                    stop = int(s[1]) + 1
+                    ids.extend(list(range(start, stop)))
+
+        # Also open the dialog for already ended matches in case the bot made a mistake
+        matches = (
+            await models.Match.filter(
+                tournament=tournament,
+                id_in_tournament__in=ids,
+                running=models.MatchRunningEnum.ENDED,
+            )
+            .order_by("id_in_tournament")
+            .select_related("team1", "team2")
+        )
+
+        for match in matches:
+            await self.tournament_manager.unend_match(match)
+
+        await ctx.message.delete()
+
+    @match_group.command(
         name="fix",
         brief="Fix match.",
         description="Fixes emotes on a match.",

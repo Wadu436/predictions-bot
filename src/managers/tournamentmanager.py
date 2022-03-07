@@ -333,7 +333,7 @@ class TournamentManager:
             .annotate(max_id=tortoise.functions.Max("id_in_tournament"))
             .first()
             .values_list("max_id")
-        )[0][0]
+        )[0]
         match = models.Match(
             id_in_tournament=1 if max_id is None else max_id + 1,
             name=name,
@@ -472,6 +472,21 @@ class TournamentManager:
 
         await match.fetch_related("tournament")
 
+        if team not in [1, 2]:
+            logging.warning(
+                f"Value of team ({team}) given to 'end_match' is invalid. Match: {match.tournament.name} Game {match.id_in_tournament}"
+            )
+            return
+        if (
+            (match.bestof == 1 and games != 1)
+            or (match.bestof == 3 and games not in [2, 3])
+            or (match.bestof == 5 and games not in [3, 4, 5])
+        ):
+            logging.warning(
+                f"Value of games ({games}) given to 'end_match' is invalid. Bestof: {match.bestof}; Match: {match.tournament.name} Game {match.id_in_tournament}"
+            )
+            return
+
         match.running = models.MatchRunningEnum.ENDED
         match.games = games
         match.result = team
@@ -531,3 +546,21 @@ class TournamentManager:
                     [match.fandom_tab],
                 )
                 await channel.send(content)
+
+    async def unend_match(self, match: models.Match, update_tournament_message=True):
+        logging.debug(f"Un-ending match {match}")
+        if match.running != models.MatchRunningEnum.ENDED:
+            return
+
+        await match.fetch_related("tournament")
+
+        match.running = models.MatchRunningEnum.CLOSED
+        match.games = 0
+        match.result = 0
+
+        await match.save()
+
+        await self.update_match_message(match)
+
+        if update_tournament_message:
+            await self.update_tournament_message(match.tournament)
