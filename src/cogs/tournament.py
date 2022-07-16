@@ -72,7 +72,12 @@ class TournamentCog(commands.Cog, name="Tournament"):
             running=models.TournamentRunningEnum.RUNNING
         ).exclude(fandom_overview_page="")
         for tournament in fandom_tournaments:
-            await self.update_fandom_matches(tournament)
+            try:
+                await self.update_fandom_matches(tournament)
+            except Exception as e:
+                logging.error(
+                    f"Error while updating matches for tournament {tournament.name}:\n{e}"
+                )
         logging.debug("Fandom matches task done.")
 
     @tasks.loop(minutes=60, reconnect=True)
@@ -135,118 +140,128 @@ class TournamentCog(commands.Cog, name="Tournament"):
         logging.debug(f"Fandom Matches:\n{matches_debug}")
         for fandommatch in fandommatches:
             # Check if match already exists
-            if fandommatch.team1 == "TBD" or fandommatch.team2 == "TBD":
-                continue
-            if (
-                fandommatch.tab,
-                fandommatch.initialn_matchintab,
-            ) not in db_matches:
-                if fandommatch.winner is None:
-                    # Match does not exist yet
-                    team1 = teams.get(fandommatch.team1)
-                    team2 = teams.get(fandommatch.team2)
-
-                    if team1 is None or team2 is None:
-                        # Update teams
-                        await self.update_fandom_teams(
-                            tournament.fandom_overview_page,
-                            tournament.guild,
-                        )
-                        # Reload teams
-                        teams = await models.Team.filter(
-                            guild=tournament.guild
-                        ).exclude(fandom_overview_page=None)
-                        teams = {t.fandom_overview_page: t for t in teams}
+            try:
+                if fandommatch.team1 == "TBD" or fandommatch.team2 == "TBD":
+                    continue
+                if (
+                    fandommatch.tab,
+                    fandommatch.initialn_matchintab,
+                ) not in db_matches:
+                    if fandommatch.winner is None:
+                        # Match does not exist yet
                         team1 = teams.get(fandommatch.team1)
                         team2 = teams.get(fandommatch.team2)
 
-                    if team1 is None or team2 is None:
-                        # If the team is still not here, skip the match
-                        continue
+                        if team1 is None or team2 is None:
+                            # Update teams
+                            await self.update_fandom_teams(
+                                tournament.fandom_overview_page,
+                                tournament.guild,
+                            )
+                            # Reload teams
+                            teams = await models.Team.filter(
+                                guild=tournament.guild
+                            ).exclude(fandom_overview_page=None)
+                            teams = {t.fandom_overview_page: t for t in teams}
+                            team1 = teams.get(fandommatch.team1)
+                            team2 = teams.get(fandommatch.team2)
 
-                    try:
-                        logging.debug(f"Starting match {fandommatch}")
-                        await self.tournament_manager.start_match(
-                            tournament,
-                            name=f"{fandommatch.tab} Match {fandommatch.n_matchintab}",
-                            team1=team1,
-                            team2=team2,
-                            bestof=fandommatch.best_of,
-                            fandom_tab=fandommatch.tab,
-                            fandom_initialn_matchintab=fandommatch.initialn_matchintab,
-                        )
-                    except Exception as e:
-                        print_exc()
-                        pass
-            else:
-                match = db_matches[(fandommatch.tab, fandommatch.initialn_matchintab)]
-                if match.running != models.MatchRunningEnum.ENDED:
-                    if (
-                        match.running == models.MatchRunningEnum.RUNNING
-                        and (fandommatch.tab, fandommatch.matchday)
-                        in matchdays_to_close
-                        and fandommatch.winner is None
-                    ):
-                        # Match should be closed, but is not over yet (no result)
-                        logging.debug(f"Closing match {fandommatch}")
-                        await self.tournament_manager.close_match(match)
-
-                    if fandommatch.winner is not None:
-                        # Match is over (there is a result)
-
-                        # Safety check on the teams
-                        if (
-                            fandommatch.team1 == match.team2.fandom_overview_page
-                            and fandommatch.team2 == match.team1.fandom_overview_page
-                        ):
-                            tmp = fandommatch.team1
-                            fandommatch.team1 = fandommatch.team2
-                            fandommatch.team2 = tmp
-
-                            tmp = fandommatch.team1_score
-                            fandommatch.team1_score = fandommatch.team2_score
-                            fandommatch.team2_score = tmp
-
-                            fandommatch.winner = 3 - fandommatch.winner  # 1->2, 2->1
-                        elif (
-                            fandommatch.team1 != match.team1.fandom_overview_page
-                            or fandommatch.team2 != match.team2.fandom_overview_page
-                        ):
-                            # Generate an error message
-                            if match.id not in self.fandommatch_errors:
-                                channel: TextChannel
-                                if tournament.updates_channel is not None:
-                                    channel_id = tournament.updates_channel
-                                    channel = self.bot.get_channel(channel_id)
-                                else:
-                                    channel_id = tournament.channel
-                                    channel = self.bot.get_channel(channel_id)
-                                message = f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
-Debug info:
-```
-DB Teams: {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
-DB Leaguepedia Tab: {match.fandom_tab}
-DB Leaguepedia InitialN_MatchInTab: {match.fandom_initialn_matchintab}
-API Teams: {fandommatch.team1} vs {fandommatch.team2}
-API Leaguepedia Tab: {fandommatch.tab}
-API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
-```
-"""
-
-                                if channel is not None:
-                                    await channel.send(message)
-                                    self.fandommatch_errors.add(match.id)
-
+                        if team1 is None or team2 is None:
+                            # If the team is still not here, skip the match
                             continue
 
-                        any_ended = True
-                        logging.debug(f"Ending match {fandommatch}")
-                        await self.tournament_manager.end_match(
-                            match,
-                            fandommatch.winner,
-                            fandommatch.team1_score + fandommatch.team2_score,
-                            update_tournament_message=False,
-                        )
+                        try:
+                            logging.debug(f"Starting match {fandommatch}")
+                            await self.tournament_manager.start_match(
+                                tournament,
+                                name=f"{fandommatch.tab} Match {fandommatch.n_matchintab}",
+                                team1=team1,
+                                team2=team2,
+                                bestof=fandommatch.best_of,
+                                fandom_tab=fandommatch.tab,
+                                fandom_initialn_matchintab=fandommatch.initialn_matchintab,
+                            )
+                        except Exception as e:
+                            print_exc()
+                            pass
+                else:
+                    match = db_matches[
+                        (fandommatch.tab, fandommatch.initialn_matchintab)
+                    ]
+                    if match.running != models.MatchRunningEnum.ENDED:
+                        if (
+                            match.running == models.MatchRunningEnum.RUNNING
+                            and (fandommatch.tab, fandommatch.matchday)
+                            in matchdays_to_close
+                            and fandommatch.winner is None
+                        ):
+                            # Match should be closed, but is not over yet (no result)
+                            logging.debug(f"Closing match {fandommatch}")
+                            await self.tournament_manager.close_match(match)
+
+                        if fandommatch.winner is not None:
+                            # Match is over (there is a result)
+
+                            # Safety check on the teams
+                            if (
+                                fandommatch.team1 == match.team2.fandom_overview_page
+                                and fandommatch.team2
+                                == match.team1.fandom_overview_page
+                            ):
+                                tmp = fandommatch.team1
+                                fandommatch.team1 = fandommatch.team2
+                                fandommatch.team2 = tmp
+
+                                tmp = fandommatch.team1_score
+                                fandommatch.team1_score = fandommatch.team2_score
+                                fandommatch.team2_score = tmp
+
+                                fandommatch.winner = (
+                                    3 - fandommatch.winner
+                                )  # 1->2, 2->1
+                            elif (
+                                fandommatch.team1 != match.team1.fandom_overview_page
+                                or fandommatch.team2 != match.team2.fandom_overview_page
+                            ):
+                                # Generate an error message
+                                if match.id not in self.fandommatch_errors:
+                                    channel: TextChannel
+                                    if tournament.updates_channel is not None:
+                                        channel_id = tournament.updates_channel
+                                        channel = self.bot.get_channel(channel_id)
+                                    else:
+                                        channel_id = tournament.channel
+                                        channel = self.bot.get_channel(channel_id)
+                                    message = f"""There was a problem ending match {match.id_in_tournament} in tournament {tournament.name} ({channel.mention}).
+    Debug info:
+    ```
+    DB Teams: {match.team1.fandom_overview_page} vs {match.team2.fandom_overview_page}
+    DB Leaguepedia Tab: {match.fandom_tab}
+    DB Leaguepedia InitialN_MatchInTab: {match.fandom_initialn_matchintab}
+    API Teams: {fandommatch.team1} vs {fandommatch.team2}
+    API Leaguepedia Tab: {fandommatch.tab}
+    API Leaguepedia InitialN_MatchInTab: {fandommatch.initialn_matchintab}
+    ```
+    """
+
+                                    if channel is not None:
+                                        await channel.send(message)
+                                        self.fandommatch_errors.add(match.id)
+
+                                continue
+
+                            any_ended = True
+                            logging.debug(f"Ending match {fandommatch}")
+                            await self.tournament_manager.end_match(
+                                match,
+                                fandommatch.winner,
+                                fandommatch.team1_score + fandommatch.team2_score,
+                                update_tournament_message=False,
+                            )
+            except Exception as e:
+                logging.error(
+                    f"Encountered error while handling match ${fandommatch}:\n${e}"
+                )
         if any_ended:
             await self.tournament_manager.update_tournament_message(tournament)
 
